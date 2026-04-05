@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.env.local
+.python-version
+.venv/
+__pycache__/
+*.pyc
+dist/
+build/
+node_modules/
+web/.next/
+web/node_modules/
+nipuxd/.venv/
+nipuxd/.mypy_cache/
+nipuxd/.pytest_cache/
+logs/
+
