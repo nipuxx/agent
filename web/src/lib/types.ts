@@ -70,6 +70,35 @@ export interface ApiReferencePricing {
   checked_at?: number | null;
 }
 
+export interface RuntimeStateSummary {
+  status: string;
+  model_loaded: boolean;
+  active_model_id?: string | null;
+  recommended_model_id?: string | null;
+  endpoint?: string | null;
+  started_at?: number | null;
+}
+
+export interface UsageSummary {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  requests: number;
+  api_equivalent_cost_usd?: number | null;
+  local_equivalent_cost_usd?: number | null;
+  savings_vs_api_usd?: number | null;
+}
+
+export interface AgentSummary {
+  id: string;
+  label: string;
+  description: string;
+  mode: string;
+  status: string;
+  started_at?: number | null;
+  uptime_seconds: number;
+}
+
 export interface HermesSummary {
   installed: boolean;
   version?: string | null;
@@ -103,6 +132,9 @@ export interface NipuxSummary {
   runtime: RuntimeSummary;
   recommendation: RecommendationSummary;
   api_reference?: ApiReferencePricing | null;
+  runtime_state: RuntimeStateSummary;
+  usage_summary: UsageSummary;
+  agents: AgentSummary[];
   install_plan: InstallPlan;
   model_catalog: ModelSummary[];
   runtime_catalog: RuntimeProfile[];

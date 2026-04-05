@@ -1,62 +1,120 @@
 "use client";
 
-import { Bot, FileCode2, Globe, TerminalSquare } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { AppShell } from "./app-shell";
-import { Panel } from "./panel";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { getSummary, startAgent, stopAgent } from "@/lib/api";
+import type { NipuxSummary } from "@/lib/types";
 
-const agentCards = [
-  {
-    icon: FileCode2,
-    title: "Code agent",
-    body: "Repo inspection, patching, tests, and filesystem-heavy work over the Hermes tool boundary.",
-  },
-  {
-    icon: Globe,
-    title: "Browser agent",
-    body: "Search, browse, and extract workflows that should feel native in the web UI.",
-  },
-  {
-    icon: TerminalSquare,
-    title: "Terminal agent",
-    body: "Command-heavy sessions with explicit approvals and controlled execution boundaries.",
-  },
-  {
-    icon: Bot,
-    title: "Orchestrator",
-    body: "A higher-level surface that chooses the right Hermes session shape for the task.",
-  },
-];
+function AgentRow({
+  label,
+  description,
+  mode,
+  status,
+  uptimeSeconds,
+  pending,
+  onStart,
+  onStop,
+}: {
+  label: string;
+  description: string;
+  mode: string;
+  status: string;
+  uptimeSeconds: number;
+  pending: boolean;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  const running = status === "running";
+  return (
+    <div className="grid gap-4 py-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-center">
+      <div className="min-w-0">
+        <div className="flex items-center gap-3">
+          <div className="text-sm font-medium">{label}</div>
+          <Badge variant={running ? "default" : "secondary"}>{running ? "Running" : "Stopped"}</Badge>
+        </div>
+        <div className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{description}</div>
+        <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+          {mode} {running ? `· ${uptimeSeconds}s uptime` : ""}
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        {running ? (
+          <Button variant="outline" size="sm" onClick={onStop} disabled={pending}>
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Stop"}
+          </Button>
+        ) : (
+          <Button size="sm" onClick={onStart} disabled={pending}>
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Start"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function AgentsView() {
+  const [summary, setSummary] = useState<NipuxSummary | null>(null);
+  const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSummary().then(setSummary);
+  }, []);
+
+  if (!summary) {
+    return (
+      <AppShell title="Agents">
+        <div className="text-sm text-[var(--muted-foreground)]">Loading Nipux…</div>
+      </AppShell>
+    );
+  }
+
+  const runAction = (target: string, task: () => Promise<NipuxSummary>) => {
+    setPendingTarget(target);
+    void (async () => {
+      const next = await task();
+      setSummary(next);
+      setPendingTarget(null);
+    })();
+  };
+
   return (
-    <AppShell
-      title="Agents"
-      subtitle="This is where Nipux can expose specialized agent surfaces without binding the frontend to Hermes implementation details."
-    >
-      <Panel
-        title="Agent surfaces"
-        description="Keep the UI opinionated and stable. Map these surfaces into Hermes sessions through the daemon layer."
-      >
-        <div className="grid gap-4 md:grid-cols-2">
-          {agentCards.map((card) => {
-            const Icon = card.icon;
-            return (
-              <Card key={card.title} className="bg-[var(--card-2)]">
-                <CardHeader>
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-sm border border-[var(--border)] bg-[var(--card)]">
-                    <Icon className="h-4 w-4 text-[var(--muted-foreground)]" />
-                  </div>
-                  <CardTitle>{card.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm leading-7 text-[var(--muted-foreground)]">
-                  {card.body}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </Panel>
+    <AppShell title="Agents" subtitle="Start and stop isolated Hermes-backed agent sessions.">
+      <Card className="rounded-md">
+        <CardContent className="p-5">
+          <div className="mb-2 flex items-center gap-3">
+            <div className="text-sm font-medium">Runtime</div>
+            <Badge variant={summary.runtime_state.model_loaded ? "default" : "secondary"}>
+              {summary.runtime_state.model_loaded ? "Model loaded" : "Model not loaded"}
+            </Badge>
+          </div>
+          <div className="text-sm text-[var(--muted-foreground)]">
+            Starting any agent will keep the local model loaded and bring the agent up as its own managed session.
+          </div>
+
+          <Separator className="my-4" />
+
+          {summary.agents.map((agent, index) => (
+            <div key={agent.id}>
+              <AgentRow
+                label={agent.label}
+                description={agent.description}
+                mode={agent.mode}
+                status={agent.status}
+                uptimeSeconds={agent.uptime_seconds}
+                pending={pendingTarget === agent.id}
+                onStart={() => runAction(agent.id, () => startAgent(agent.id))}
+                onStop={() => runAction(agent.id, () => stopAgent(agent.id))}
+              />
+              {index < summary.agents.length - 1 ? <Separator /> : null}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </AppShell>
   );
 }
