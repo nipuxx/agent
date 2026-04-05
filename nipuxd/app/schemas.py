@@ -11,6 +11,7 @@ class SummaryResponse(BaseModel):
     hermes: dict[str, Any]
     runtime: dict[str, Any]
     recommendation: dict[str, Any]
+    api_reference: dict[str, Any] | None = None
     install_plan: dict[str, Any]
     model_catalog: list[dict[str, Any]]
     runtime_catalog: list[dict[str, Any]]

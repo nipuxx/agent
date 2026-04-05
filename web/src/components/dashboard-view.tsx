@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Cpu, HardDrive, Layers3, Zap } from "lucide-react";
 import { AppShell } from "./app-shell";
-import { Panel } from "./panel";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSummary } from "@/lib/api";
 import { formatDeviceMeta } from "@/lib/planner";
 import type { NipuxSummary } from "@/lib/types";
+
+function formatMoney(value?: number | null) {
+  if (value == null) return "--";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value < 1 ? 2 : 2,
+    maximumFractionDigits: value < 1 ? 3 : 2,
+  }).format(value);
+}
 
 function MetricCard({
   label,
@@ -17,16 +25,16 @@ function MetricCard({
 }: {
   label: string;
   value: string;
-  hint: string;
+  hint?: string;
 }) {
   return (
-    <Card className="bg-[var(--card-2)]">
+    <Card className="rounded-md bg-[var(--card-2)]">
       <CardContent className="p-5">
-        <div className="text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
           {label}
         </div>
-        <div className="mt-3 text-3xl font-semibold tracking-tight">{value}</div>
-        <div className="mt-2 text-sm text-[var(--muted-foreground)]">{hint}</div>
+        <div className="mt-3 text-2xl font-semibold tracking-tight">{value}</div>
+        {hint ? <div className="mt-2 text-sm text-[var(--muted-foreground)]">{hint}</div> : null}
       </CardContent>
     </Card>
   );
@@ -48,112 +56,146 @@ export function DashboardView() {
   }
 
   const recommended = summary.recommendation.selected;
+  const primaryGpu = summary.system.gpus[0];
+  const apiReference = summary.api_reference;
+  const localEstimate = summary.recommendation.estimated_cost_per_million_tokens_usd;
+  const savings =
+    apiReference?.blended_per_million_usd != null && localEstimate != null
+      ? apiReference.blended_per_million_usd - localEstimate
+      : null;
 
   return (
     <AppShell
       title="Dashboard"
-      subtitle="Machine state, recommended stack, and install readiness. Nothing is installed until the setup flow is confirmed."
+      subtitle="Local hardware, recommended Carnice path, and live API reference pricing for the matching Qwen base model."
     >
-      <div className="grid gap-4 xl:grid-cols-4">
+      <div className="grid gap-3 xl:grid-cols-6">
         <MetricCard
-          label="recommended model"
+          label="Local model"
           value={recommended ? `${recommended.family} ${recommended.size}` : "Unsupported"}
-          hint={recommended ? `${recommended.quantization} via ${summary.runtime.label}` : summary.recommendation.reason}
+          hint={recommended ? `${recommended.quantization} · ${summary.runtime.label}` : summary.recommendation.reason}
         />
         <MetricCard
-          label="usable memory"
+          label="Usable memory"
           value={`${summary.recommendation.effective_vram_gb.toFixed(0)} GB`}
-          hint={summary.system.apple_silicon ? "Unified-memory budget" : "Usable VRAM budget"}
+          hint={summary.system.apple_silicon ? "Unified-memory budget" : "VRAM budget"}
         />
         <MetricCard
-          label="estimated throughput"
+          label="Local speed"
           value={
             summary.recommendation.estimated_tokens_per_second != null
-              ? `${summary.recommendation.estimated_tokens_per_second.toFixed(1)}`
+              ? `${summary.recommendation.estimated_tokens_per_second.toFixed(1)} t/s`
               : "--"
           }
-          hint="Tokens / second estimate for the recommended path"
+          hint="Estimated local generation rate"
         />
         <MetricCard
-          label="local cost"
-          value={
-            summary.recommendation.estimated_cost_per_million_tokens_usd != null
-              ? `$${summary.recommendation.estimated_cost_per_million_tokens_usd.toFixed(2)}`
-              : "--"
+          label="OpenRouter prompt"
+          value={formatMoney(apiReference?.prompt_per_million_usd)}
+          hint={apiReference ? `1M input tokens · ${apiReference.model_id}` : "Pricing unavailable"}
+        />
+        <MetricCard
+          label="OpenRouter completion"
+          value={formatMoney(apiReference?.completion_per_million_usd)}
+          hint="1M output tokens"
+        />
+        <MetricCard
+          label="API 1M in + 1M out"
+          value={formatMoney(apiReference?.blended_per_million_usd)}
+          hint={
+            savings != null
+              ? `${formatMoney(savings)} above the local power estimate`
+              : "Prompt + completion reference cost"
           }
-          hint="Estimated effective cost per 1M output tokens"
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Panel
-          title="Detected hardware"
-          description="Nipux reads the host first, then recommends the lightest correct local path."
-          right={<Badge variant="secondary">{summary.system.hostname}</Badge>}
-        >
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Cpu className="h-4 w-4 text-[var(--muted-foreground)]" />
-                Host
+      <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="rounded-md">
+          <CardHeader className="border-b border-[var(--border)] pb-4">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>Machine</CardTitle>
+              <Badge variant="secondary">{summary.system.hostname}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5 p-5">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">
+                {summary.system.chip_name ?? summary.system.cpu_model}
               </div>
-              <div className="mt-3 space-y-1 text-sm text-[var(--muted-foreground)]">
-                <div>{summary.system.platform} {summary.system.release}</div>
-                <div>{summary.system.arch}</div>
-                <div>{summary.system.chip_name ?? summary.system.cpu_model}</div>
-                <div>{summary.system.ram_gb} GB RAM</div>
+              <div className="text-sm text-[var(--muted-foreground)]">
+                {summary.system.platform} {summary.system.release} · {summary.system.arch} · {summary.system.ram_gb} GB RAM
               </div>
             </div>
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Layers3 className="h-4 w-4 text-[var(--muted-foreground)]" />
-                Accelerators
-              </div>
-              <div className="mt-3 space-y-3">
-                {summary.system.gpus.map((gpu) => (
-                  <div key={`${gpu.vendor}-${gpu.name}`} className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3">
-                    <div className="text-sm font-medium">{gpu.name}</div>
-                    <div className="mt-1 text-sm text-[var(--muted-foreground)]">
-                      {formatDeviceMeta(gpu)}
-                      {gpu.memory_bandwidth_gbps ? ` · ${gpu.memory_bandwidth_gbps} GB/s` : ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Panel>
 
-        <Panel title="Install gate" description="Runtime and model downloads stay behind the setup wizard.">
-          <div className="space-y-4">
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Zap className="h-4 w-4 text-[var(--muted-foreground)]" />
-                Recommended runtime
+            {primaryGpu ? (
+              <div className="space-y-1">
+                <div className="text-sm font-medium">{primaryGpu.name}</div>
+                <div className="text-sm text-[var(--muted-foreground)]">
+                  {formatDeviceMeta(primaryGpu)}
+                  {primaryGpu.memory_bandwidth_gbps ? ` · ${primaryGpu.memory_bandwidth_gbps} GB/s` : ""}
+                </div>
               </div>
-              <div className="mt-2 text-sm text-[var(--muted-foreground)]">{summary.runtime.reason}</div>
+            ) : (
+              <div className="text-sm text-[var(--muted-foreground)]">
+                No accelerator detected yet.
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium">Hermes</div>
+              <div className="text-sm text-[var(--muted-foreground)]">
+                {summary.hermes.installed
+                  ? `Installed at ${summary.hermes.binary}`
+                  : "Not installed yet. Nipux will wire it later through the setup flow."}
+              </div>
             </div>
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <HardDrive className="h-4 w-4 text-[var(--muted-foreground)]" />
-                Install footprint
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-md">
+          <CardHeader className="border-b border-[var(--border)] pb-4">
+            <CardTitle>Plan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5 p-5">
+            <div className="space-y-1">
+              <div className="text-sm font-medium">
+                {recommended
+                  ? `Run ${recommended.family} ${recommended.size} ${recommended.quantization} through ${summary.runtime.label}.`
+                  : "This machine does not currently fit a supported Carnice build."}
               </div>
-              <div className="mt-2 text-2xl font-semibold">
-                {summary.install_plan.estimated_disk_needed_gb.toFixed(1)} GB
-              </div>
-              <div className="mt-2 text-sm text-[var(--muted-foreground)]">
-                The daemon will not install the runtime or model until you confirm the plan in Configs.
+              <div className="text-sm text-[var(--muted-foreground)]">
+                Nipux has only planned the stack so far. Nothing is downloaded or installed until you confirm it in Configs.
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                  First-time disk
+                </div>
+                <div className="mt-2 text-xl font-semibold">
+                  {summary.install_plan.estimated_disk_needed_gb.toFixed(1)} GB
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                  Base model reference
+                </div>
+                <div className="mt-2 text-xl font-semibold">
+                  {apiReference ? apiReference.label.replace("Qwen: ", "") : "Unavailable"}
+                </div>
+              </div>
+            </div>
+
             {summary.install_plan.warnings.length ? (
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
+              <div className="border-t border-[var(--border)] pt-4 text-sm text-[var(--muted-foreground)]">
                 {summary.install_plan.warnings.join(" ")}
               </div>
             ) : null}
-          </div>
-        </Panel>
+          </CardContent>
+        </Card>
       </div>
     </AppShell>
   );
 }
-

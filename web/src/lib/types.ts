@@ -58,6 +58,18 @@ export interface RecommendationSummary {
   platform_track?: string;
 }
 
+export interface ApiReferencePricing {
+  provider: string;
+  model_id: string;
+  label: string;
+  prompt_per_million_usd: number;
+  completion_per_million_usd: number;
+  blended_per_million_usd: number;
+  context_length?: number | null;
+  source_url: string;
+  checked_at?: number | null;
+}
+
 export interface HermesSummary {
   installed: boolean;
   version?: string | null;
@@ -90,6 +102,7 @@ export interface NipuxSummary {
   hermes: HermesSummary;
   runtime: RuntimeSummary;
   recommendation: RecommendationSummary;
+  api_reference?: ApiReferencePricing | null;
   install_plan: InstallPlan;
   model_catalog: ModelSummary[];
   runtime_catalog: RuntimeProfile[];

@@ -71,6 +71,17 @@ export const mockSummary: NipuxSummary = {
       notes: "Apple Silicon path via MLX. Repo assumed to exist for planning.",
     },
   },
+  api_reference: {
+    provider: "OpenRouter",
+    model_id: "qwen/qwen3.5-9b",
+    label: "Qwen: Qwen3.5-9B",
+    prompt_per_million_usd: 0.05,
+    completion_per_million_usd: 0.15,
+    blended_per_million_usd: 0.2,
+    context_length: 256000,
+    source_url: "https://openrouter.ai/qwen/qwen3.5-9b",
+    checked_at: 1775377200,
+  },
   install_plan: {
     estimated_disk_needed_gb: 11.5,
     requires_confirmation: true,

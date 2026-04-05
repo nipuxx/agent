@@ -28,7 +28,7 @@ export function ChatView() {
             {chats.map((chat, index) => (
               <div
                 key={chat}
-                className={`rounded-md px-3 py-2 text-sm ${index === 0 ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]"}`}
+                className={`rounded-sm px-3 py-2 text-sm ${index === 0 ? "bg-[var(--accent)] text-[var(--accent-foreground)]" : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]"}`}
               >
                 {chat}
               </div>
@@ -39,12 +39,12 @@ export function ChatView() {
         <Panel title="Conversation" description="The main content area should stay quiet and readable.">
           <div className="flex min-h-[620px] flex-col">
             <div className="flex-1 space-y-6">
-              <div className="max-w-[85%] rounded-md border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm leading-7 text-[var(--foreground)]">
+              <div className="max-w-[85%] rounded-sm border border-[var(--border)] bg-[var(--card-2)] px-4 py-3 text-sm leading-7 text-[var(--foreground)]">
                 I&apos;ll help you run Hermes locally. First I’ll inspect the machine, then I’ll recommend the safest runtime and Carnice build.
               </div>
               <div className="text-xs text-[var(--muted-foreground)]">Future work: stream real daemon-backed sessions here instead of placeholder copy.</div>
             </div>
-            <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--card-2)] p-3">
+            <div className="mt-6 rounded-md border border-[var(--border)] bg-[var(--card-2)] p-3">
               <Textarea placeholder="Message…" className="min-h-[88px] border-0 bg-transparent px-0 py-0 focus-visible:ring-0" />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <div className="flex gap-2">
@@ -60,4 +60,3 @@ export function ChatView() {
     </AppShell>
   );
 }
-

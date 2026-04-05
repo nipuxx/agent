@@ -44,7 +44,7 @@ export function AgentsView() {
             return (
               <Card key={card.title} className="bg-[var(--card-2)]">
                 <CardHeader>
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)]">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-sm border border-[var(--border)] bg-[var(--card)]">
                     <Icon className="h-4 w-4 text-[var(--muted-foreground)]" />
                   </div>
                   <CardTitle>{card.title}</CardTitle>

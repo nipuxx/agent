@@ -30,7 +30,7 @@ function StepDot({ index, current }: { index: number; current: number }) {
   return (
     <div
       className={cn(
-        "flex h-8 w-8 items-center justify-center rounded-full border text-xs font-medium",
+        "flex h-8 w-8 items-center justify-center rounded-sm border text-xs font-medium",
         index <= current
           ? "border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
           : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)]",
@@ -126,7 +126,7 @@ export function SetupView() {
         >
           {step === 0 ? (
             <div className="space-y-4">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
                 Nipux detected {summary.system.chip_name ?? summary.system.cpu_model} on {summary.system.platform}. Pick the accelerator and memory budget you want to use for local inference.
               </div>
               <div className="grid gap-3">
@@ -145,7 +145,7 @@ export function SetupView() {
                         setSelectedModelId(nextModel?.id ?? "");
                       }}
                       className={cn(
-                        "rounded-lg border p-4 text-left transition-colors",
+                        "rounded-md border p-4 text-left transition-colors",
                         active
                           ? "border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
                           : "border-[var(--border)] bg-[var(--card-2)] text-[var(--foreground)] hover:bg-[var(--card)]",
@@ -162,7 +162,7 @@ export function SetupView() {
                   );
                 })}
               </div>
-              <div className="space-y-3 rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="space-y-3 rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="memory-budget">Memory budget</Label>
                   <div className="text-sm text-[var(--muted-foreground)]">{memoryBudgetGb.toFixed(0)} GB</div>
@@ -200,7 +200,7 @@ export function SetupView() {
                       setSelectedModelId(nextModel?.id ?? "");
                     }}
                     className={cn(
-                      "rounded-lg border p-4 text-left transition-colors",
+                      "rounded-md border p-4 text-left transition-colors",
                       active
                         ? "border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
                         : "border-[var(--border)] bg-[var(--card-2)] hover:bg-[var(--card)]",
@@ -221,7 +221,7 @@ export function SetupView() {
 
           {step === 2 ? (
             <div className="space-y-4">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
                 Nipux recommends the highest-quality Carnice build that still fits your chosen memory budget.
               </div>
               <div className="grid gap-3">
@@ -234,7 +234,7 @@ export function SetupView() {
                       type="button"
                       onClick={() => setSelectedModelId(model.id)}
                       className={cn(
-                        "rounded-lg border p-4 text-left transition-colors",
+                        "rounded-md border p-4 text-left transition-colors",
                         active
                           ? "border-transparent bg-[var(--accent)] text-[var(--accent-foreground)]"
                           : "border-[var(--border)] bg-[var(--card-2)] hover:bg-[var(--card)]",
@@ -256,7 +256,7 @@ export function SetupView() {
                   );
                 })}
                 {modelOptions.length === 0 ? (
-                  <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
+                  <div className="rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
                     No models fit the current runtime and memory budget. Increase the budget or switch the runtime.
                   </div>
                 ) : null}
@@ -266,23 +266,23 @@ export function SetupView() {
 
           {step === 3 ? (
             <div className="space-y-4">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4">
+              <div className="rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="text-sm font-medium">Review before install</div>
                   <Badge variant="secondary">No install yet</Badge>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="rounded-sm border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Device</div>
                     <div className="mt-2 text-sm">{selectedDevice?.label ?? "None"}</div>
                     <div className="mt-1 text-sm text-[var(--muted-foreground)]">{selectedDevice?.details}</div>
                   </div>
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="rounded-sm border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Runtime</div>
                     <div className="mt-2 text-sm">{selectedRuntimeId || "None"}</div>
                     <div className="mt-1 text-sm text-[var(--muted-foreground)]">Nothing is installed until you click Start install.</div>
                   </div>
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="rounded-sm border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Model</div>
                     <div className="mt-2 text-sm">
                       {selectedModel ? `${selectedModel.family} ${selectedModel.size} ${selectedModel.quantization}` : "None"}
@@ -291,7 +291,7 @@ export function SetupView() {
                       {selectedModel?.repo ?? "No repo selected"}
                     </div>
                   </div>
-                  <div className="rounded-md border border-[var(--border)] bg-[var(--card)] p-3">
+                  <div className="rounded-sm border border-[var(--border)] bg-[var(--card)] p-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Estimated disk</div>
                     <div className="mt-2 text-sm">{installDisk} GB</div>
                     <div className="mt-1 text-sm text-[var(--muted-foreground)]">
@@ -301,7 +301,7 @@ export function SetupView() {
                 </div>
               </div>
               {installQueued ? (
-                <div className="rounded-lg border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
+                <div className="rounded-md border border-[var(--border)] bg-[var(--card-2)] p-4 text-sm text-[var(--muted-foreground)]">
                   Install intent captured in the UI layer. The next backend pass should wire this button to real daemon actions for runtime install and model download.
                 </div>
               ) : null}
@@ -365,4 +365,3 @@ export function SetupView() {
     </AppShell>
   );
 }
-
