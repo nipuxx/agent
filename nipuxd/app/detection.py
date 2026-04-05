@@ -27,6 +27,10 @@ BANDWIDTH_HINTS = {
     "MI210": 1638,
     "RX 7900": 960,
     "Arc A770": 560,
+    "Apple M1": 68,
+    "Apple M2": 100,
+    "Apple M3": 100,
+    "Apple M4": 120,
 }
 
 
@@ -141,22 +145,72 @@ def detect_intel() -> list[dict]:
     return rows
 
 
+def estimate_apple_usable_memory(ram_gb: float) -> float:
+    if ram_gb <= 8:
+        return max(ram_gb - 2.0, 0.0)
+    return max(min(ram_gb - 4.0, ram_gb * 0.75), 0.0)
+
+
+def detect_apple(ram_gb: float) -> list[dict]:
+    if platform.system() != "Darwin" or platform.machine() != "arm64":
+        return []
+
+    raw = run_command(["system_profiler", "SPHardwareDataType", "SPDisplaysDataType"], timeout=12)
+    if not raw:
+        return []
+
+    chip_match = re.search(r"^\s*Chip:\s*(.+)$", raw, flags=re.M)
+    chip_name = chip_match.group(1).strip() if chip_match else "Apple Silicon"
+
+    metal_match = re.search(r"^\s*Metal Support:\s*(.+)$", raw, flags=re.M)
+    metal_support = metal_match.group(1).strip() if metal_match else None
+
+    gpu_name = chip_name
+    gpu_rows = [
+        {
+            "id": "apple-unified-gpu",
+            "vendor": "Apple",
+            "name": gpu_name,
+            "vram_gb": round(estimate_apple_usable_memory(ram_gb), 1),
+            "memory_bandwidth_gbps": lookup_bandwidth(gpu_name),
+            "driver": metal_support,
+            "power_limit_watts": None,
+            "memory_kind": "unified",
+            "shared_memory_gb": ram_gb,
+        }
+    ]
+    return gpu_rows
+
+
 def detect_system() -> dict:
     disk = shutil.disk_usage(str(Path.home()))
     hostname = socket.gethostname()
     ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+
+    apple_gpus = detect_apple(ram_gb)
+    gpus = detect_nvidia() + detect_amd() + detect_intel()
+    if apple_gpus:
+        gpus = apple_gpus + gpus
+
+    chip_name = None
+    if platform.system() == "Darwin":
+        raw = run_command(["system_profiler", "SPHardwareDataType"], timeout=8)
+        chip_match = re.search(r"^\s*Chip:\s*(.+)$", raw, flags=re.M)
+        if chip_match:
+            chip_name = chip_match.group(1).strip()
 
     return {
         "hostname": hostname,
         "platform": platform.system(),
         "release": platform.release(),
         "arch": platform.machine(),
+        "chip_name": chip_name,
+        "apple_silicon": platform.system() == "Darwin" and platform.machine() == "arm64",
         "cpu_model": platform.processor() or platform.machine(),
         "cpu_cores_logical": psutil.cpu_count(logical=True) or 0,
         "cpu_cores_physical": psutil.cpu_count(logical=False) or 0,
         "ram_gb": ram_gb,
         "disk_free_gb": round(disk.free / (1024 ** 3), 1),
         "disk_total_gb": round(disk.total / (1024 ** 3), 1),
-        "gpus": detect_nvidia() + detect_amd() + detect_intel(),
+        "gpus": gpus,
     }
-

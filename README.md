@@ -13,13 +13,14 @@ The core idea is simple:
 Nipux is designed around three jobs:
 
 1. Detect the host and decide whether it should run `Carnice-9b` or `Carnice-27b`.
-2. Pick the safest quantization and runtime for the available VRAM and bandwidth budget.
+2. Pick the safest quantization and runtime for the available VRAM, unified memory, and bandwidth budget.
 3. Stand up a browser-based interface for chat, agent control, install flow, and Hermes-backed sessions.
 
-The first implementation in this repo includes:
+The current implementation in this repo includes:
 
 - A FastAPI daemon for hardware detection and planning
-- A Next.js web UI with a `vLLM Studio`-inspired layout
+- Apple Silicon detection with an `MLX` inference path
+- A Next.js web UI with a minimal `vLLM Studio` / `Open WebUI`-inspired layout
 - A clean architecture for isolating Hermes Agent from the UI
 - Bootstrap scripts for local development
 
@@ -57,9 +58,21 @@ Instead:
 - Nipux profiles and config live under a managed Nipux directory
 - Hermes can be upgraded independently as long as the adapter contract still holds
 
+## Install Philosophy
+
+Nipux does not install runtimes or model weights just because you ran the bootstrap script.
+
+The bootstrap script only installs the Nipux application itself:
+
+- Python dependencies for `nipuxd`
+- Node dependencies for the web UI
+
+Runtime installation and model download are intentionally deferred to the UI onboarding flow so the
+user can review the machine plan first.
+
 ## Current Model Heuristics
 
-Nipux currently assumes the following target ladder:
+Nipux currently assumes the following default ladder:
 
 - `< 8 GB` usable VRAM: unsupported for Carnice
 - `8 GB`: `Carnice-9b Q4_K_M`
@@ -68,5 +81,6 @@ Nipux currently assumes the following target ladder:
 - `24 GB`: `Carnice-27b Q4_K_M`
 - `32 GB`: `Carnice-27b Q8_0`
 
-These values are intentionally conservative and are surfaced through the daemon API so they can be tuned without rewriting the frontend.
+For Apple Silicon, Nipux also exposes an `MLX` track based on usable unified-memory budget.
 
+These values are intentionally conservative and are surfaced through the daemon API so they can be tuned without rewriting the frontend.

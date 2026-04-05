@@ -13,4 +13,4 @@ class SummaryResponse(BaseModel):
     recommendation: dict[str, Any]
     install_plan: dict[str, Any]
     model_catalog: list[dict[str, Any]]
-
+    runtime_catalog: list[dict[str, Any]]

@@ -5,7 +5,8 @@ from typing import Iterable
 from .catalog import MODEL_CATALOG, RUNTIME_PROFILES
 
 
-def choose_runtime(gpus: Iterable[dict], selected_model: dict | None = None) -> dict:
+def choose_runtime(system: dict, selected_model: dict | None = None) -> dict:
+    gpus = system["gpus"]
     gpu_list = list(gpus)
     if selected_model is not None:
         runtime_id = selected_model["runtime"]
@@ -16,6 +17,13 @@ def choose_runtime(gpus: Iterable[dict], selected_model: dict | None = None) -> 
                 "label": runtime_row["label"],
                 "reason": f"{selected_model['family']} {selected_model['size']} {selected_model['quantization']} is packaged for {runtime_row['label']}.",
             }
+
+    if system.get("apple_silicon"):
+        return {
+            "id": "mlx",
+            "label": "MLX",
+            "reason": "Apple Silicon detected. Prefer MLX for unified-memory local inference.",
+        }
 
     if not gpu_list:
         return {
@@ -47,26 +55,39 @@ def choose_runtime(gpus: Iterable[dict], selected_model: dict | None = None) -> 
     }
 
 
-def choose_model(gpus: Iterable[dict], system_ram_gb: float) -> dict:
-    gpu_list = list(gpus)
+def choose_model(system: dict) -> dict:
+    gpu_list = list(system["gpus"])
+    system_ram_gb = system["ram_gb"]
+    apple_silicon = system.get("apple_silicon", False)
     total_vram = sum(gpu.get("vram_gb", 0.0) or 0.0 for gpu in gpu_list)
     max_bandwidth = max((gpu.get("memory_bandwidth_gbps") or 0.0) for gpu in gpu_list) if gpu_list else 0.0
     usable_vram = total_vram if len(gpu_list) > 1 else max((gpu.get("vram_gb", 0.0) for gpu in gpu_list), default=0.0)
 
-    if max_bandwidth and max_bandwidth < 260 and usable_vram >= 24:
+    if apple_silicon:
+        catalog = [item for item in MODEL_CATALOG if item["runtime"] == "mlx"]
+        usable_vram = max((gpu.get("vram_gb", 0.0) for gpu in gpu_list if gpu.get("vendor") == "Apple"), default=usable_vram)
+    else:
+        catalog = [item for item in MODEL_CATALOG if item["runtime"] == "llama.cpp"]
+
+    if not apple_silicon and max_bandwidth and max_bandwidth < 260 and usable_vram >= 24:
         usable_vram = min(usable_vram, 16.0)
 
     selected = None
-    for item in MODEL_CATALOG:
+    for item in catalog:
         if usable_vram >= item["min_vram_gb"] and system_ram_gb >= item["target_ram_gb"]:
             selected = item
 
     if selected is None:
         return {
             "supported": False,
-            "reason": "Carnice requires at least 8 GB of usable VRAM and enough system RAM for the selected quantization.",
+            "reason": (
+                "Carnice requires enough usable GPU or unified memory for the selected quantization."
+                if apple_silicon
+                else "Carnice requires at least 8 GB of usable VRAM and enough system RAM for the selected quantization."
+            ),
             "selected_model_id": None,
             "effective_vram_gb": usable_vram,
+            "platform_track": "mlx" if apple_silicon else "gguf",
         }
 
     estimated_tps = estimate_tokens_per_second(selected, usable_vram, max_bandwidth)
@@ -80,11 +101,16 @@ def choose_model(gpus: Iterable[dict], system_ram_gb: float) -> dict:
         "estimated_tokens_per_second": estimated_tps,
         "estimated_cost_per_million_tokens_usd": effective_cost,
         "reason": f"Selected {selected['family']} {selected['size']} {selected['quantization']} for {usable_vram:.0f} GB usable VRAM.",
+        "platform_track": "mlx" if apple_silicon else "gguf",
     }
 
 
 def estimate_tokens_per_second(model: dict, usable_vram_gb: float, bandwidth_gbps: float | None) -> float:
     base = {
+        "carnice-9b-mlx-4bit": 34.0,
+        "carnice-9b-mlx-8bit": 22.0,
+        "carnice-27b-mlx-4bit": 12.0,
+        "carnice-27b-mlx-8bit": 7.0,
         "carnice-9b-q4km": 92.0,
         "carnice-9b-q6": 68.0,
         "carnice-9b-q8": 54.0,
@@ -125,8 +151,10 @@ def build_install_plan(system: dict, recommendation: dict, runtime: dict, hermes
 
     return {
         "estimated_disk_needed_gb": round(install_size, 1),
+        "requires_confirmation": True,
         "warnings": warnings,
         "steps": [
+            "Wait for the user to confirm the plan inside the Nipux onboarding flow.",
             "Create a Nipux-managed Hermes home and profile directory.",
             f"Install or validate the {runtime['label']} runtime.",
             "Download the recommended Carnice build.",

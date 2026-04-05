@@ -1,10 +1,13 @@
 export interface GpuInfo {
+  id?: string;
   vendor: string;
   name: string;
   vram_gb: number;
   memory_bandwidth_gbps?: number | null;
   driver?: string | null;
   power_limit_watts?: number | null;
+  memory_kind?: string | null;
+  shared_memory_gb?: number | null;
 }
 
 export interface SystemSummary {
@@ -12,6 +15,8 @@ export interface SystemSummary {
   platform: string;
   release: string;
   arch: string;
+  chip_name?: string | null;
+  apple_silicon?: boolean;
   cpu_model: string;
   cpu_cores_logical: number;
   cpu_cores_physical: number;
@@ -33,6 +38,7 @@ export interface ModelSummary {
   size: string;
   quantization: string;
   runtime: string;
+  artifact_kind: string;
   min_vram_gb: number;
   target_vram_gb: number;
   target_ram_gb: number;
@@ -49,6 +55,7 @@ export interface RecommendationSummary {
   estimated_tokens_per_second?: number;
   estimated_cost_per_million_tokens_usd?: number;
   reason: string;
+  platform_track?: string;
 }
 
 export interface HermesSummary {
@@ -63,8 +70,18 @@ export interface HermesSummary {
 
 export interface InstallPlan {
   estimated_disk_needed_gb: number;
+  requires_confirmation?: boolean;
   warnings: string[];
   steps: string[];
+}
+
+export interface RuntimeProfile {
+  id: string;
+  label: string;
+  best_for: string;
+  install_size_gb: number;
+  network_exposed: boolean;
+  supports_apple?: boolean;
 }
 
 export interface NipuxSummary {
@@ -75,5 +92,5 @@ export interface NipuxSummary {
   recommendation: RecommendationSummary;
   install_plan: InstallPlan;
   model_catalog: ModelSummary[];
+  runtime_catalog: RuntimeProfile[];
 }
-

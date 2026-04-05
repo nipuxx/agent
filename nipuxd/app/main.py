@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .catalog import MODEL_CATALOG
+from .catalog import MODEL_CATALOG, RUNTIME_PROFILES
 from .detection import detect_system
 from .hermes_bridge import get_hermes_status
 from .planner import build_install_plan, choose_model, choose_runtime
@@ -22,8 +22,8 @@ app.add_middleware(
 def build_summary() -> SummaryResponse:
     system = detect_system()
     hermes = get_hermes_status()
-    recommendation = choose_model(system["gpus"], system["ram_gb"])
-    runtime = choose_runtime(system["gpus"], recommendation.get("selected"))
+    recommendation = choose_model(system)
+    runtime = choose_runtime(system, recommendation.get("selected"))
     install_plan = build_install_plan(system, recommendation, runtime, hermes)
     return SummaryResponse(
         product="Nipux",
@@ -33,6 +33,7 @@ def build_summary() -> SummaryResponse:
         recommendation=recommendation,
         install_plan=install_plan,
         model_catalog=MODEL_CATALOG,
+        runtime_catalog=RUNTIME_PROFILES,
     )
 
 
