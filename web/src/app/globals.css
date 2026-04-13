@@ -1,17 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #060606;
-  --surface: rgba(9, 9, 9, 0.92);
-  --surface-2: rgba(13, 13, 13, 0.94);
-  --surface-3: rgba(18, 18, 18, 0.96);
-  --rail: #050505;
-  --foreground: #f4f4f0;
-  --muted-foreground: #a4a49d;
-  --subtle-foreground: #73736d;
-  --border: rgba(255, 255, 255, 0.16);
-  --border-strong: rgba(255, 255, 255, 0.26);
-  --accent: #efefea;
+  --background: #040404;
+  --surface: rgba(10, 10, 10, 0.94);
+  --surface-2: rgba(12, 12, 12, 0.97);
+  --surface-3: rgba(18, 18, 18, 0.98);
+  --rail: #020202;
+  --foreground: #f1f0ea;
+  --muted-foreground: #9f9f98;
+  --subtle-foreground: #6f6f69;
+  --border: rgba(255, 255, 255, 0.13);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --accent: #f2f2ed;
   --accent-foreground: #050505;
   --danger: #f38a78;
   --success: #e9e9e3;
@@ -36,12 +36,10 @@ body {
   width: 100%;
   min-height: 100%;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 26%),
-    radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.02), transparent 28%),
-    #060606;
-  background-size: 120px 120px, 120px 120px, auto, auto, auto;
+    radial-gradient(circle at 12% 14%, rgba(255, 255, 255, 0.035), transparent 22%),
+    radial-gradient(circle at 78% 82%, rgba(255, 255, 255, 0.025), transparent 22%),
+    linear-gradient(125deg, rgba(255, 255, 255, 0.018) 0%, transparent 16%, transparent 84%, rgba(255, 255, 255, 0.012) 100%),
+    #040404;
   color: var(--foreground);
 }
 
@@ -56,11 +54,13 @@ body::before {
   pointer-events: none;
   position: fixed;
   inset: 0;
-  opacity: 0.12;
+  opacity: 0.085;
   background-image:
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.08), transparent 18%),
-    radial-gradient(circle at 80% 16%, rgba(255, 255, 255, 0.04), transparent 20%),
-    radial-gradient(circle at 70% 78%, rgba(255, 255, 255, 0.05), transparent 22%);
+    linear-gradient(140deg, transparent 0 32%, rgba(255, 255, 255, 0.08) 32% 33%, transparent 33%),
+    linear-gradient(35deg, transparent 0 52%, rgba(255, 255, 255, 0.05) 52% 53%, transparent 53%),
+    radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.08), transparent 16%),
+    radial-gradient(circle at 84% 14%, rgba(255, 255, 255, 0.05), transparent 16%),
+    radial-gradient(circle at 68% 76%, rgba(255, 255, 255, 0.06), transparent 18%);
   mix-blend-mode: screen;
 }
 
@@ -109,7 +109,7 @@ select {
 .nipux-panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(1px);
 }
 
 .nipux-panel-soft {
