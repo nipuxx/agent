@@ -4,23 +4,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-sm text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+  "nipux-mono inline-flex items-center justify-center gap-2 whitespace-nowrap border text-[11px] uppercase tracking-[0.2em] transition-colors disabled:pointer-events-none disabled:opacity-50 outline-none",
   {
     variants: {
       variant: {
         default:
-          "bg-[var(--accent)] text-[var(--accent-foreground)] hover:bg-[var(--accent-hover)]",
+          "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-foreground)] hover:opacity-90",
         secondary:
-          "bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--secondary-hover)]",
+          "border-[var(--border)] bg-[var(--surface-2)] text-[var(--foreground)] hover:bg-[var(--surface-3)]",
         outline:
-          "border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:bg-[var(--card-2)]",
-        ghost: "text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]",
+          "border-[var(--border-strong)] bg-transparent text-[var(--foreground)] hover:bg-[var(--surface-2)]",
+        ghost: "border-transparent bg-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-sm px-3 text-xs",
-        lg: "h-11 rounded-sm px-6",
-        icon: "h-10 w-10",
+        default: "h-11 px-5 py-2",
+        sm: "h-9 px-3",
+        lg: "h-12 px-7",
+        icon: "h-11 w-11",
       },
     },
     defaultVariants: {

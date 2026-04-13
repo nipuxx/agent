@@ -1,41 +1,47 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, LayoutDashboard, MessageSquare, Settings2 } from "lucide-react";
+import { Boxes, LayoutGrid, MessageSquareText, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
+import type { TelemetrySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/setup", label: "Configs", icon: Settings2 },
-  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/dashboard", label: "Control", icon: LayoutGrid },
+  { href: "/chat", label: "Console", icon: MessageSquareText },
+  { href: "/agents", label: "Nodes", icon: Boxes },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
+function TelemetryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
+      <span>{label}:</span>
+      <span className="text-[var(--foreground)]">{value}</span>
+    </div>
+  );
+}
+
 export function AppShell({
-  title,
-  subtitle,
   children,
+  telemetry,
 }: {
-  title: string;
-  subtitle?: string;
   children: ReactNode;
+  telemetry?: TelemetrySummary | null;
 }) {
   const pathname = usePathname();
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="border-r border-[var(--border)] bg-[var(--sidebar)]">
-          <div className="flex h-16 items-center border-b border-[var(--border)] px-5">
-            <div>
-              <div className="text-sm font-semibold tracking-tight">Nipux</div>
-              <div className="text-xs text-[var(--muted-foreground)]">Hermes local control plane</div>
-            </div>
+      <div className="grid min-h-screen grid-cols-[72px_minmax(0,1fr)]">
+        <aside className="flex flex-col border-r border-[var(--border)] bg-[var(--rail)]">
+          <div className="flex h-[72px] items-center justify-center border-b border-[var(--border)]">
+            <div className="nipux-mono text-[18px] uppercase tracking-[0.16em]">A_01</div>
           </div>
 
-          <nav className="space-y-1 p-3">
+          <nav className="flex flex-1 flex-col items-center gap-6 py-6">
             {NAV.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
@@ -43,30 +49,48 @@ export function AppShell({
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={item.label}
                   className={cn(
-                    "flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors",
+                    "flex h-14 w-14 items-center justify-center border transition-colors",
                     active
-                      ? "bg-[var(--accent)] text-[var(--accent-foreground)]"
-                      : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]",
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-foreground)]"
+                      : "border-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:bg-[var(--surface-3)] hover:text-[var(--foreground)]",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
-                  <span>{item.label}</span>
+                  <Icon className="h-6 w-6" strokeWidth={1.5} />
                 </Link>
               );
             })}
           </nav>
         </aside>
 
-        <main className="min-w-0">
-          <header className="border-b border-[var(--border)] px-6 py-5">
-            <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-            {subtitle ? (
-              <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{subtitle}</p>
-            ) : null}
+        <div className="min-w-0">
+          <header className="flex h-[72px] items-center justify-between border-b border-[var(--border)] px-8">
+            <div className="flex items-center gap-5">
+              <div className="flex items-center gap-3">
+                <Image src="/nipux-logo.png" alt="Nipux" width={28} height={28} className="h-7 w-7" />
+                <div className="nipux-display text-[42px] uppercase leading-none tracking-[0.04em]">
+                  NIPUX_OS
+                </div>
+              </div>
+
+              {telemetry ? (
+                <div className="hidden items-center gap-8 lg:flex">
+                  <TelemetryItem label="CPU" value={`${telemetry.cpu_percent.toFixed(1)}%`} />
+                  <TelemetryItem label="RAM" value={`${telemetry.ram_used_gb.toFixed(1)}GB`} />
+                  <TelemetryItem label="Nodes" value={String(telemetry.node_count).padStart(2, "0")} />
+                  <TelemetryItem label="Sessions" value={String(telemetry.total_sessions).padStart(2, "0")} />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
+              LOCAL_SECURE
+            </div>
           </header>
-          <div className="px-6 py-6">{children}</div>
-        </main>
+
+          <main className="p-0">{children}</main>
+        </div>
       </div>
     </div>
   );

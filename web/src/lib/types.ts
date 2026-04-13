@@ -26,36 +26,86 @@ export interface SystemSummary {
   gpus: GpuInfo[];
 }
 
-export interface RuntimeSummary {
+export interface TelemetrySummary {
+  cpu_percent: number;
+  ram_used_gb: number;
+  ram_total_gb: number;
+  node_count: number;
+  active_nodes: number;
+  active_sessions: number;
+  total_sessions: number;
+  total_tokens: number;
+  total_throughput_tps: number;
+}
+
+export interface HermesStatusSummary {
+  installed: boolean;
+  configured: boolean;
+  version?: string | null;
+  binary?: string | null;
+  home: string;
+  config_path: string;
+  env_path: string;
+  state_db_path: string;
+  logs_path: string;
+  gateway_running: boolean;
+  install_command: string;
+}
+
+export interface HermesSettingsSummary {
+  installed: boolean;
+  configured: boolean;
+  binary?: string | null;
+  home: string;
+  config_path: string;
+  env_path: string;
+  model: string;
+  toolsets: string[];
+  max_turns: number;
+  terminal_backend: string;
+  terminal_cwd: string;
+  compression_enabled: boolean;
+  compression_threshold: number;
+  display_personality: string;
+  openai_base_url: string;
+  openrouter_api_key_set: boolean;
+  openrouter_api_key_hint: string;
+  openai_api_key_set: boolean;
+  openai_api_key_hint: string;
+}
+
+export interface RuntimeStateSummary {
+  status: string;
+  model_loaded: boolean;
+  active_model_id?: string | null;
+  recommended_model_id?: string | null;
+  endpoint?: string | null;
+  started_at?: number | null;
+}
+
+export interface NodeSummary {
   id: string;
+  identifier: string;
   label: string;
-  reason: string;
+  status: string;
+  mode: string;
+  model: string;
+  latency_ms: number;
+  tokens_per_sec: number;
+  total_tokens: number;
+  uptime_seconds: number;
+  description: string;
+  trend: number[];
 }
 
-export interface ModelSummary {
-  id: string;
-  family: string;
-  size: string;
-  quantization: string;
-  runtime: string;
-  artifact_kind: string;
-  min_vram_gb: number;
-  target_vram_gb: number;
-  target_ram_gb: number;
-  repo: string;
-  filename: string;
-  notes: string;
-}
-
-export interface RecommendationSummary {
-  supported: boolean;
-  selected_model_id?: string | null;
-  selected?: ModelSummary;
-  effective_vram_gb: number;
-  estimated_tokens_per_second?: number;
-  estimated_cost_per_million_tokens_usd?: number;
-  reason: string;
-  platform_track?: string;
+export interface UsageSummary {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  requests: number;
+  tool_calls: number;
+  api_equivalent_cost_usd?: number | null;
+  savings_vs_api_usd?: number | null;
 }
 
 export interface ApiReferencePricing {
@@ -70,72 +120,38 @@ export interface ApiReferencePricing {
   checked_at?: number | null;
 }
 
-export interface RuntimeStateSummary {
-  status: string;
-  model_loaded: boolean;
-  active_model_id?: string | null;
-  recommended_model_id?: string | null;
-  endpoint?: string | null;
-  started_at?: number | null;
-}
-
-export interface UsageSummary {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  requests: number;
-  api_equivalent_cost_usd?: number | null;
-  local_equivalent_cost_usd?: number | null;
-  savings_vs_api_usd?: number | null;
-}
-
-export interface AgentSummary {
-  id: string;
-  label: string;
-  description: string;
-  mode: string;
-  status: string;
-  started_at?: number | null;
-  uptime_seconds: number;
-}
-
-export interface HermesSummary {
-  installed: boolean;
-  version?: string | null;
-  binary?: string | null;
-  managed_home: string;
-  managed_profile: string;
-  strategy: string;
-  environment: Record<string, string>;
-}
-
-export interface InstallPlan {
-  estimated_disk_needed_gb: number;
-  requires_confirmation?: boolean;
-  warnings: string[];
-  steps: string[];
-}
-
-export interface RuntimeProfile {
-  id: string;
-  label: string;
-  best_for: string;
-  install_size_gb: number;
-  network_exposed: boolean;
-  supports_apple?: boolean;
-}
-
 export interface NipuxSummary {
   product: string;
   system: SystemSummary;
-  hermes: HermesSummary;
-  runtime: RuntimeSummary;
-  recommendation: RecommendationSummary;
-  api_reference?: ApiReferencePricing | null;
+  telemetry: TelemetrySummary;
+  hermes: HermesStatusSummary;
+  settings: HermesSettingsSummary;
   runtime_state: RuntimeStateSummary;
+  nodes: NodeSummary[];
+  log_lines: string[];
   usage_summary: UsageSummary;
-  agents: AgentSummary[];
-  install_plan: InstallPlan;
-  model_catalog: ModelSummary[];
-  runtime_catalog: RuntimeProfile[];
+  api_reference?: ApiReferencePricing | null;
+  agents: Array<{
+    id: string;
+    label: string;
+    description: string;
+    mode: string;
+    status: string;
+    started_at?: number | null;
+    uptime_seconds: number;
+  }>;
+}
+
+export interface HermesSettingsUpdate {
+  model?: string;
+  toolsets?: string[] | string;
+  max_turns?: number;
+  terminal_backend?: string;
+  terminal_cwd?: string;
+  compression_enabled?: boolean;
+  compression_threshold?: number;
+  display_personality?: string;
+  openai_base_url?: string;
+  openrouter_api_key?: string;
+  openai_api_key?: string;
 }
