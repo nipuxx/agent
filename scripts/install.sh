@@ -33,7 +33,10 @@ echo
 echo "Nipux dependencies are installed."
 echo
 echo "Next steps:"
-echo "  1. bash scripts/dev.sh"
-echo "  2. Open http://127.0.0.1:3000"
+echo "  1. bash scripts/start.sh"
+echo "  2. Open http://<server-ip>:3000"
 echo
-echo "Runtime installation and long-run execution are managed through Nipux."
+echo "For frontend development instead:"
+echo "  bash scripts/dev.sh"
+echo
+echo "First load goes to /setup so you can choose the runtime, model, and install options."

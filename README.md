@@ -26,12 +26,20 @@ web/                   Browser UI
 git clone https://github.com/nipuxx/agent.git
 cd agent
 bash scripts/install.sh
-bash scripts/dev.sh
+bash scripts/start.sh
 ```
 
 Then open:
 
-- `http://127.0.0.1:3000`
+- `http://<server-ip>:3000`
+
+First load goes to `/setup` so you can choose the runtime, model, and install options.
+
+For local frontend development instead:
+
+```bash
+bash scripts/dev.sh
+```
 
 ## Current Architecture
 

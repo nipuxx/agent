@@ -2,6 +2,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+API_HOST="${NIPUX_API_HOST:-0.0.0.0}"
+API_PORT="${NIPUX_API_PORT:-9384}"
+WEB_HOST="${NIPUX_WEB_HOST:-0.0.0.0}"
+WEB_PORT="${NIPUX_WEB_PORT:-3000}"
 
 if [ ! -d "$ROOT/.venv" ]; then
   echo "Missing Python environment. Run: bash scripts/install.sh"
@@ -22,8 +26,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 source "$ROOT/.venv/bin/activate"
-python -m uvicorn nipuxd.app.main:app --app-dir "$ROOT" --host 0.0.0.0 --port 9384 &
+export NIPUXD_URL="http://127.0.0.1:${API_PORT}"
+
+python -m uvicorn nipuxd.app.main:app --app-dir "$ROOT" --host "$API_HOST" --port "$API_PORT" &
 API_PID=$!
 
 cd "$ROOT/web"
-npm run dev
+npm run build
+npx next start --hostname "$WEB_HOST" --port "$WEB_PORT"

@@ -405,9 +405,11 @@ def _run_install_task(task_id: str, runtime_id: str, runtime_home: Path, model: 
             if result.returncode != 0:
                 raise RuntimeError(f"Model download failed for {model['id']}")
         update_install_task(task_id, status="completed", detail={"logs": [f"{runtime_id} install complete."]})
+        update_runtime_state(install_task_id=None)
         publish("system", "runtime", "runtime.install.completed", {"task_id": task_id, "runtime_id": runtime_id})
     except Exception as exc:
         update_install_task(task_id, status="failed", detail={"logs": [str(exc)]})
+        update_runtime_state(install_task_id=None)
         publish("system", "runtime", "runtime.install.failed", {"task_id": task_id, "error": str(exc)}, level="error")
 
 
@@ -426,6 +428,12 @@ def start_install_task(plan: dict[str, Any]) -> dict[str, Any]:
 
 def get_runtime_status() -> dict[str, Any]:
     state = get_runtime_state()
+    task_id = state.get("install_task_id")
+    if task_id:
+        task = get_install_task(str(task_id))
+        if task and task.get("status") in {"completed", "failed"}:
+            update_runtime_state(install_task_id=None)
+            state = get_runtime_state()
     endpoint = state.get("endpoint")
     health = state.get("last_health") or {}
     if state.get("status") == "running" and not endpoint and not state.get("pid"):
