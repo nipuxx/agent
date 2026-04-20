@@ -1,33 +1,52 @@
 from __future__ import annotations
 
-import re
+from pathlib import Path
 from typing import Any
 
 import psutil
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 
+from .agent_manager import (
+    create_agent_record,
+    create_thread_record,
+    delete_agent_record,
+    get_agent_browser,
+    get_thread_bundle,
+    list_agent_records,
+    list_thread_records,
+    post_thread_message,
+    update_agent_record,
+)
+from .browser_service import browser_command, get_browser_session, get_browser_view, get_frame_path
+from .db import (
+    get_active_run_for_thread,
+    get_app_settings,
+    get_run,
+    get_runtime_state,
+    get_usage_metrics,
+    init_db,
+    list_events,
+    list_recent_events,
+    list_runs,
+    list_task_nodes,
+    save_app_settings,
+)
 from .detection import detect_system
-from .hermes_bridge import (
-    get_hermes_log_lines,
-    get_hermes_metrics,
-    get_hermes_settings,
-    get_hermes_status,
-    save_hermes_settings,
-)
-from .pricing import get_openrouter_reference_for_size
-from .schemas import SummaryResponse
-from .state import (
-    AGENT_CATALOG,
-    build_agents_summary,
-    build_runtime_state,
-    load_state,
-    set_agent_status,
-    set_runtime_loaded,
-    set_runtime_unloaded,
+from .event_bus import stream_sse
+from .harness import cancel_run, pause_run, resume_run, start_agent, stop_agent
+from .runtime_manager import (
+    get_runtime_plan,
+    get_runtime_status,
+    save_runtime_preferences,
+    start_install_task,
+    start_runtime,
+    stop_runtime,
 )
 
-app = FastAPI(title="Nipux Daemon", version="0.2.0")
+
+app = FastAPI(title="Nipux Daemon", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,169 +55,361 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-def infer_model_size(model_name: str | None) -> str | None:
-    if not model_name:
-        return None
-    match = re.search(r"(?i)\b(9b|27b)\b", model_name)
-    if match:
-        return match.group(1).upper()
-    return None
+init_db()
 
 
-def build_usage_summary(metrics: dict[str, Any], api_reference: dict[str, Any] | None) -> dict[str, Any]:
-    prompt_tokens = int(metrics.get("prompt_tokens", 0) or 0)
-    completion_tokens = int(metrics.get("completion_tokens", 0) or 0)
-    api_cost = None
-    if api_reference:
-        api_cost = round(
-            (prompt_tokens / 1_000_000.0) * float(api_reference["prompt_per_million_usd"])
-            + (completion_tokens / 1_000_000.0) * float(api_reference["completion_per_million_usd"]),
-            4,
-        )
+def _recent_log_lines(limit: int = 12) -> list[str]:
+    lines: list[str] = []
+    for event in list_recent_events(limit=limit):
+        payload = event.get("payload") or {}
+        if isinstance(payload, dict):
+            if payload.get("line"):
+                lines.append(str(payload["line"]))
+                continue
+            if payload.get("message"):
+                lines.append(str(payload["message"]))
+                continue
+            if event["event_type"].startswith("runtime."):
+                lines.append(f"[runtime] {event['event_type']}")
+                continue
+            if event["event_type"].startswith("run."):
+                lines.append(f"[run] {event['event_type']}")
+                continue
+            if event["event_type"].startswith("task."):
+                lines.append(f"[task] {event['event_type']}")
+                continue
+            if event["event_type"].startswith("browser."):
+                lines.append(f"[browser] {event['event_type']}")
+                continue
+        lines.append(event["event_type"])
+    return lines[-limit:]
 
-    return {
-        "prompt_tokens": prompt_tokens,
-        "completion_tokens": completion_tokens,
-        "total_tokens": int(metrics.get("total_tokens", 0) or 0),
-        "requests": int(metrics.get("total_sessions", 0) or 0),
-        "tool_calls": int(metrics.get("tool_calls", 0) or 0),
-        "api_equivalent_cost_usd": api_cost,
-        "savings_vs_api_usd": api_cost,
-    }
 
-
-def build_nodes(state: dict[str, Any], metrics: dict[str, Any], settings: dict[str, Any]) -> list[dict[str, Any]]:
-    recent_sessions = list(metrics.get("recent_sessions", []))
-    nodes = []
-    agents = build_agents_summary(state)
+def _build_nodes(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    nodes: list[dict[str, Any]] = []
+    usage = get_usage_metrics()
+    total_tokens = int(usage.get("total_tokens") or 0)
+    avg_tps = float(usage.get("avg_tps") or 0.0)
     for index, agent in enumerate(agents):
-        session = recent_sessions[index] if index < len(recent_sessions) else None
-        running = agent["status"] == "running"
-        total_tokens = int(session.get("total_tokens", 0)) if session else 0
-        tokens_per_sec = float(session.get("tokens_per_sec", 0.0)) if session else 0.0
-        latency_ms = float(session.get("latency_ms", 0.0)) if session else 0.0
-        if running and not session:
-            tokens_per_sec = 0.0
-            latency_ms = 0.0
-
+        browser = get_agent_browser(agent["id"])
+        active_run = None
+        for run in list_runs(limit=20, status="running"):
+            if run["agent_id"] == agent["id"]:
+                active_run = run
+                break
         nodes.append(
             {
                 "id": agent["id"],
                 "identifier": f"NODE_{index + 1:02d}",
-                "label": agent["label"],
-                "status": "active" if running else "idle",
-                "mode": agent["mode"],
-                "model": (session or {}).get("model") or settings.get("model") or "UNASSIGNED",
-                "latency_ms": round(latency_ms, 1),
-                "tokens_per_sec": round(tokens_per_sec, 1),
+                "label": agent["name"],
+                "status": "active" if agent["status"] == "running" else "idle",
+                "mode": "supervisor" if agent["id"] == "orchestrator" else "worker",
+                "model": get_app_settings().get("openai_model") or get_runtime_state().get("active_model_id") or "UNBOUND",
+                "latency_ms": 0.0,
+                "tokens_per_sec": round(avg_tps if agent["status"] == "running" else 0.0, 1),
                 "total_tokens": total_tokens,
-                "uptime_seconds": agent["uptime_seconds"],
-                "description": agent["description"],
-                "trend": [
-                    max(8, min(72, int(total_tokens / factor))) if total_tokens else base
-                    for factor, base in ((1600, 14), (1200, 22), (900, 30), (1400, 20))
-                ],
+                "uptime_seconds": 0,
+                "description": active_run["goal"] if active_run else agent["description"],
+                "trend": [18, 24, 30, 36] if agent["status"] == "running" else [10, 12, 14, 10],
+                "browser_session_id": browser["id"] if browser else None,
+                "browser_url": browser["current_url"] if browser else "",
             }
         )
     return nodes
 
 
-def build_telemetry(system: dict[str, Any], nodes: list[dict[str, Any]], usage: dict[str, Any], metrics: dict[str, Any]) -> dict[str, Any]:
+def build_summary() -> dict[str, Any]:
+    system = detect_system()
+    runtime_state = get_runtime_status()
+    runtime_plan = get_runtime_plan()
+    settings = get_app_settings()
+    agents = list_agent_records()
+    runs = list_runs(limit=20)
+    usage = get_usage_metrics()
+    nodes = _build_nodes(agents)
     memory = psutil.virtual_memory()
-    return {
+    telemetry = {
         "cpu_percent": round(psutil.cpu_percent(interval=0.0), 1),
-        "ram_used_gb": round(memory.used / (1024 ** 3), 1),
-        "ram_total_gb": round(memory.total / (1024 ** 3), 1),
+        "ram_used_gb": round(memory.used / (1024**3), 1),
+        "ram_total_gb": round(memory.total / (1024**3), 1),
         "node_count": len(nodes),
-        "active_nodes": sum(1 for node in nodes if node["status"] == "active"),
-        "active_sessions": int(metrics.get("active_sessions", 0) or 0),
-        "total_sessions": int(metrics.get("total_sessions", 0) or 0),
-        "total_tokens": usage["total_tokens"],
-        "total_throughput_tps": round(sum(float(node["tokens_per_sec"]) for node in nodes), 1),
+        "active_nodes": sum(1 for item in nodes if item["status"] == "active"),
+        "active_sessions": int(usage.get("active_sessions") or 0),
+        "total_sessions": int(usage.get("total_sessions") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+        "total_throughput_tps": round(sum(float(item["tokens_per_sec"]) for item in nodes), 1),
+    }
+    usage_summary = {
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+        "requests": int(usage.get("total_sessions") or 0),
+        "tool_calls": int(usage.get("tool_calls") or 0),
+        "api_equivalent_cost_usd": None,
+        "savings_vs_api_usd": None,
+    }
+    return {
+        "product": "Nipux",
+        "system": system,
+        "telemetry": telemetry,
+        "settings": settings,
+        "runtime_state": runtime_state,
+        "runtime_plan": runtime_plan,
+        "nodes": nodes,
+        "log_lines": _recent_log_lines(),
+        "usage_summary": usage_summary,
+        "agents": agents,
+        "runs": runs,
     }
 
 
-def build_summary() -> SummaryResponse:
-    system = detect_system()
-    hermes = get_hermes_status()
-    settings = get_hermes_settings()
-    selected_model_id = settings.get("model") or None
-    state = load_state(selected_model_id)
-    runtime_state = build_runtime_state(state, {"selected_model_id": selected_model_id})
-    if settings.get("openai_base_url"):
-        runtime_state["endpoint"] = settings["openai_base_url"]
-
-    size = infer_model_size(runtime_state.get("active_model_id") or settings.get("model"))
-    api_reference = get_openrouter_reference_for_size(size)
-    metrics = get_hermes_metrics(limit=4)
-    usage_summary = build_usage_summary(metrics, api_reference)
-    nodes = build_nodes(state, metrics, settings)
-    telemetry = build_telemetry(system, nodes, usage_summary, metrics)
-    log_lines = get_hermes_log_lines(limit=12)
-
-    return SummaryResponse(
-        product="Nipux",
-        system=system,
-        telemetry=telemetry,
-        hermes=hermes,
-        settings=settings,
-        runtime_state=runtime_state,
-        nodes=nodes,
-        log_lines=log_lines,
-        usage_summary=usage_summary,
-        api_reference=api_reference,
-        agents=build_agents_summary(state),
-    )
-
-
 @app.get("/health")
-def health() -> dict:
+def health() -> dict[str, Any]:
     return {"ok": True, "service": "nipuxd"}
 
 
-@app.get("/api/summary", response_model=SummaryResponse)
-def summary() -> SummaryResponse:
+@app.get("/api/summary")
+def summary() -> dict[str, Any]:
     return build_summary()
 
 
-@app.get("/api/hermes/settings")
-def get_settings() -> dict[str, Any]:
-    return get_hermes_settings()
+@app.get("/api/events/stream")
+def events_stream() -> StreamingResponse:
+    return StreamingResponse(stream_sse(), media_type="text/event-stream")
 
 
-@app.put("/api/hermes/settings")
+@app.get("/api/runtime/plan")
+def runtime_plan() -> dict[str, Any]:
+    return get_runtime_plan()
+
+
+@app.post("/api/runtime/install")
+def runtime_install(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    runtime_id = payload.get("runtime_id")
+    model_id = payload.get("model_id")
+    if runtime_id or model_id:
+        save_runtime_preferences(runtime_id=runtime_id, model_id=model_id)
+    plan = get_runtime_plan()
+    return start_install_task(plan)
+
+
+@app.get("/api/runtime/install/{task_id}")
+def runtime_install_task(task_id: str) -> dict[str, Any]:
+    from .db import get_install_task
+
+    task = get_install_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Unknown install task")
+    return task
+
+
+@app.post("/api/runtime/start")
+def runtime_start(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    try:
+        return start_runtime(runtime_id=payload.get("runtime_id"), model_id=payload.get("model_id"))
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/runtime/stop")
+def runtime_stop() -> dict[str, Any]:
+    return stop_runtime()
+
+
+@app.get("/api/runtime/status")
+def runtime_status() -> dict[str, Any]:
+    return get_runtime_status()
+
+
+@app.get("/api/settings")
+def settings() -> dict[str, Any]:
+    return get_app_settings()
+
+
+@app.put("/api/settings")
 def update_settings(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return save_hermes_settings(payload)
+    settings = save_app_settings(payload)
+    runtime_id = payload.get("preferred_runtime_id")
+    model_id = payload.get("preferred_model_id")
+    if runtime_id or model_id:
+        save_runtime_preferences(runtime_id=runtime_id, model_id=model_id)
+    return settings
 
 
-@app.post("/api/runtime/load", response_model=SummaryResponse)
-def load_runtime() -> SummaryResponse:
-    selected_model_id = get_hermes_settings().get("model") or None
-    set_runtime_loaded(selected_model_id)
-    return build_summary()
+@app.get("/api/agents")
+def agents() -> list[dict[str, Any]]:
+    return list_agent_records()
 
 
-@app.post("/api/runtime/unload", response_model=SummaryResponse)
-def unload_runtime() -> SummaryResponse:
-    selected_model_id = get_hermes_settings().get("model") or None
-    set_runtime_unloaded(selected_model_id)
-    return build_summary()
+@app.post("/api/agents")
+def agents_create(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    return create_agent_record(payload)
 
 
-@app.post("/api/agents/{agent_id}/start", response_model=SummaryResponse)
-def start_agent(agent_id: str) -> SummaryResponse:
-    if agent_id not in {agent["id"] for agent in AGENT_CATALOG}:
+@app.patch("/api/agents/{agent_id}")
+def agents_update(agent_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    agent = update_agent_record(agent_id, payload)
+    if agent is None:
         raise HTTPException(status_code=404, detail="Unknown agent")
-    selected_model_id = get_hermes_settings().get("model") or None
-    set_agent_status(agent_id, True, selected_model_id)
-    return build_summary()
+    return agent
 
 
-@app.post("/api/agents/{agent_id}/stop", response_model=SummaryResponse)
-def stop_agent(agent_id: str) -> SummaryResponse:
-    if agent_id not in {agent["id"] for agent in AGENT_CATALOG}:
+@app.delete("/api/agents/{agent_id}")
+def agents_delete(agent_id: str) -> dict[str, Any]:
+    delete_agent_record(agent_id)
+    return {"ok": True}
+
+
+@app.post("/api/agents/{agent_id}/start")
+def agents_start(agent_id: str) -> dict[str, Any]:
+    try:
+        result = start_agent(agent_id)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return result
+
+
+@app.post("/api/agents/{agent_id}/stop")
+def agents_stop(agent_id: str) -> dict[str, Any]:
+    agent = stop_agent(agent_id)
+    if agent is None:
         raise HTTPException(status_code=404, detail="Unknown agent")
-    selected_model_id = get_hermes_settings().get("model") or None
-    set_agent_status(agent_id, False, selected_model_id)
-    return build_summary()
+    return agent
+
+
+@app.get("/api/agents/{agent_id}/browser")
+def agent_browser(agent_id: str) -> dict[str, Any]:
+    session = get_browser_view(agent_id)
+    return session
+
+
+@app.get("/api/browser/{session_id}/frame")
+def browser_frame(session_id: str) -> FileResponse:
+    path = get_frame_path(session_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Browser frame not available")
+    return FileResponse(path, media_type="image/jpeg")
+
+
+@app.post("/api/browser/{session_id}/input")
+def browser_input(session_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    action = str(payload.get("action") or "").strip()
+    if not action:
+        raise HTTPException(status_code=400, detail="Missing browser action")
+    try:
+        return browser_command(session_id, action, payload)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/threads")
+def threads(agent_id: str | None = Query(default=None)) -> list[dict[str, Any]]:
+    return list_thread_records(agent_id)
+
+
+@app.post("/api/threads")
+def threads_create(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    agent_id = str(payload.get("agent_id") or "").strip()
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="Missing agent_id")
+    return create_thread_record(agent_id, payload.get("title"))
+
+
+@app.get("/api/threads/{thread_id}")
+def thread_bundle(thread_id: str) -> dict[str, Any]:
+    bundle = get_thread_bundle(thread_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Unknown thread")
+    return bundle
+
+
+@app.post("/api/threads/{thread_id}/messages")
+def thread_message(thread_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    body = str(payload.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Missing message body")
+    try:
+        return post_thread_message(thread_id, body)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/threads/{thread_id}/events")
+def thread_events(thread_id: str) -> StreamingResponse:
+    return StreamingResponse(stream_sse(stream_type="thread", stream_id=thread_id), media_type="text/event-stream")
+
+
+@app.get("/api/runs")
+def runs() -> list[dict[str, Any]]:
+    return list_runs(limit=100)
+
+
+@app.post("/api/runs")
+def create_run_direct(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    thread_id = str(payload.get("thread_id") or "").strip()
+    body = str(payload.get("goal") or "").strip()
+    if not thread_id or not body:
+        raise HTTPException(status_code=400, detail="Missing thread_id or goal")
+    thread = get_thread_bundle(thread_id)
+    if thread is None:
+        raise HTTPException(status_code=404, detail="Unknown thread")
+    post_thread_message(thread_id, body)
+    run = get_active_run_for_thread(thread_id)
+    if run is None:
+        raise HTTPException(status_code=409, detail="Failed to create run")
+    return run
+
+
+@app.get("/api/runs/{run_id}")
+def run_detail(run_id: str) -> dict[str, Any]:
+    run = get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    tasks = list_task_nodes(run_id)
+    return {**run, "tasks": tasks}
+
+
+@app.post("/api/runs/{run_id}/pause")
+def run_pause(run_id: str) -> dict[str, Any]:
+    run = pause_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    return run
+
+
+@app.post("/api/runs/{run_id}/resume")
+def run_resume(run_id: str) -> dict[str, Any]:
+    run = resume_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    return run
+
+
+@app.post("/api/runs/{run_id}/cancel")
+def run_cancel(run_id: str) -> dict[str, Any]:
+    run = cancel_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    return run
+
+
+@app.get("/api/runs/{run_id}/tasks")
+def run_tasks(run_id: str) -> list[dict[str, Any]]:
+    if get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    return list_task_nodes(run_id)
+
+
+@app.get("/api/tasks/{task_id}")
+def task_detail(task_id: str) -> dict[str, Any]:
+    from .db import get_task_node
+
+    task = get_task_node(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Unknown task")
+    return task
+
+
+@app.get("/api/runs/{run_id}/events")
+def run_events(run_id: str) -> StreamingResponse:
+    return StreamingResponse(stream_sse(stream_type="run", stream_id=run_id), media_type="text/event-stream")

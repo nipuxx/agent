@@ -2,39 +2,30 @@
 
 ## Goals
 
-Nipux needs to do three things at once:
+Nipux needs to do four things at once:
 
 1. Install and run the right local inference stack for the host.
-2. Expose a clean web UI for chat, setup, and agent control.
-3. Survive Hermes Agent churn without breaking the frontend every time upstream changes its internals.
+2. Expose a clean web UI for runs, chat, agents, browser control, and settings.
+3. Keep long-horizon state durable so work can run for hours or days.
+4. Verify progress with checkpoints instead of trusting one giant transcript.
 
-## The Boundary
+## Boundary
 
-The important design choice is that the frontend never imports Hermes code and never depends on Hermes data structures directly.
+The important design choice is that the frontend never talks to a model runtime directly and never owns long-run agent state.
 
 The layers are:
 
 ```text
 Browser UI
   -> Nipux HTTP API
-    -> Runtime Manager
-    -> Model Planner
-    -> Hermes Adapter
-      -> Hermes CLI / Hermes-managed profile / local model server
+    -> SQLite state + event log
+    -> Runtime manager
+    -> Browser service
+    -> Orchestrator / worker harness
+      -> local model runtime (MLX / vLLM / llama.cpp or external OpenAI-compatible endpoint)
 ```
 
-## Why This Matters
-
-Hermes Agent moves fast. If the web app imported Hermes internals directly, every upstream refactor would become a frontend breakage risk.
-
-Nipux avoids that by using:
-
-- managed Hermes install paths
-- managed Nipux-owned config and profile paths
-- subprocess boundaries
-- a narrow adapter layer that translates Nipux session intents into Hermes process calls
-
-## Services
+## Core Services
 
 ### `nipuxd`
 
@@ -44,50 +35,36 @@ Nipux avoids that by using:
 - runtime recommendation
 - model/quant recommendation
 - install planning
-- Hermes install status
-- Nipux-managed profile paths
+- agent records
+- thread, run, task, checkpoint, and artifact state
+- normalized event logs
 
-### Hermes Adapter
+### Runtime Manager
 
-The Hermes adapter is responsible for:
+The runtime manager chooses and controls local inference:
 
-- detecting Hermes installation and version
-- maintaining a Nipux-owned Hermes home/profile
-- launching Hermes processes in a controlled environment
-- translating process-level events into stable API responses
+- prefer `MLX` on Apple Silicon
+- prefer `vLLM` on NVIDIA/CUDA hosts that can sustain it
+- fall back to `llama.cpp` for broad GGUF compatibility
 
-This allows Nipux to keep using upstream Hermes while limiting the surface area that can break.
+### Browser Service
 
-## Runtime Strategy
+Browser control is a first-class subsystem:
 
-Nipux should choose runtimes conservatively:
+- one browser session per agent
+- Playwright + Chromium
+- live frame endpoint for the UI
+- user takeover via manual mode
 
-- Prefer `vLLM` on NVIDIA hosts with enough VRAM
-- Prefer `llama.cpp` for low-VRAM or broad compatibility paths
-- Fall back cleanly when hardware capability is uncertain
+### Harness
 
-The planner should not just chase VRAM. It should also consider:
+The harness is built around:
 
-- vendor support
-- memory bandwidth hints
-- quantization fit
-- disk footprint
-- whether the selected runtime can actually serve the chosen model
+- runs
+- task nodes
+- bounded worker loops
+- checkpoints
+- artifacts
+- verifier-driven progress
 
-## Frontend Strategy
-
-The UI is intentionally product-oriented:
-
-- `Dashboard`: what the machine can do right now
-- `Setup`: confirm hardware, runtime, model, download, and launch flow
-- `Chat`: model and Hermes-backed conversations
-- `Agents`: specialized agent surfaces and system roles
-
-The visual system is inspired by control-plane products rather than generic chat apps:
-
-- dense but readable metric strips
-- strong information hierarchy
-- warm/dark surfaces with bright accent tokens
-- compact side navigation
-- clean cards over giant empty whitespace
-
+The critical rule is that accepted progress gets checkpointed into durable state; the agent does not depend on replaying an unbounded transcript.

@@ -24,6 +24,7 @@ fi
 source "$ROOT/.venv/bin/activate"
 python -m pip install --upgrade pip >/dev/null
 python -m pip install -r "$ROOT/nipuxd/requirements.txt"
+python -m playwright install chromium
 
 cd "$ROOT/web"
 npm install
@@ -35,6 +36,4 @@ echo "Next steps:"
 echo "  1. bash scripts/dev.sh"
 echo "  2. Open http://127.0.0.1:3000"
 echo
-echo "Hermes and runtime installation are intentionally managed through Nipux planning,"
-echo "not hard-wired into the frontend."
-
+echo "Runtime installation and long-run execution are managed through Nipux."
