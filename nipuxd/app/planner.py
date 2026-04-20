@@ -63,11 +63,13 @@ def choose_model(system: dict) -> dict:
     max_bandwidth = max((gpu.get("memory_bandwidth_gbps") or 0.0) for gpu in gpu_list) if gpu_list else 0.0
     usable_vram = total_vram if len(gpu_list) > 1 else max((gpu.get("vram_gb", 0.0) for gpu in gpu_list), default=0.0)
 
+    catalog = [item for item in MODEL_CATALOG if item["runtime"] == "llama.cpp"]
+
     if apple_silicon:
-        catalog = [item for item in MODEL_CATALOG if item["runtime"] == "mlx"]
-        usable_vram = max((gpu.get("vram_gb", 0.0) for gpu in gpu_list if gpu.get("vendor") == "Apple"), default=usable_vram)
-    else:
-        catalog = [item for item in MODEL_CATALOG if item["runtime"] == "llama.cpp"]
+        usable_vram = max(
+            (gpu.get("vram_gb", 0.0) for gpu in gpu_list if gpu.get("vendor") == "Apple"),
+            default=usable_vram,
+        )
 
     if not apple_silicon and max_bandwidth and max_bandwidth < 260 and usable_vram >= 24:
         usable_vram = min(usable_vram, 16.0)
@@ -81,13 +83,13 @@ def choose_model(system: dict) -> dict:
         return {
             "supported": False,
             "reason": (
-                "Carnice requires enough usable GPU or unified memory for the selected quantization."
+                "Carnice requires enough usable unified memory for the selected GGUF quantization."
                 if apple_silicon
                 else "Carnice requires at least 8 GB of usable VRAM and enough system RAM for the selected quantization."
             ),
             "selected_model_id": None,
             "effective_vram_gb": usable_vram,
-            "platform_track": "mlx" if apple_silicon else "gguf",
+            "platform_track": "gguf",
         }
 
     estimated_tps = estimate_tokens_per_second(selected, usable_vram, max_bandwidth)
@@ -101,7 +103,7 @@ def choose_model(system: dict) -> dict:
         "estimated_tokens_per_second": estimated_tps,
         "estimated_cost_per_million_tokens_usd": effective_cost,
         "reason": f"Selected {selected['family']} {selected['size']} {selected['quantization']} for {usable_vram:.0f} GB usable VRAM.",
-        "platform_track": "mlx" if apple_silicon else "gguf",
+        "platform_track": "gguf",
     }
 
 

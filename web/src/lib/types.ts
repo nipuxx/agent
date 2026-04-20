@@ -121,6 +121,14 @@ export interface NipuxSettings {
   openai_base_url: string;
   openai_api_key?: string;
   openai_model: string;
+  preferred_runtime_id?: string;
+  preferred_model_id?: string;
+  custom_model_enabled: boolean;
+  custom_model_name: string;
+  custom_model_repo: string;
+  custom_model_filename: string;
+  custom_model_runtime: string;
+  custom_model_size_gb: number;
   worker_action_budget: number;
   checkpoint_every_actions: number;
   max_runtime_minutes: number;
@@ -295,6 +303,14 @@ export interface SettingsUpdate {
   openai_base_url?: string;
   openai_api_key?: string;
   openai_model?: string;
+  preferred_runtime_id?: string;
+  preferred_model_id?: string;
+  custom_model_enabled?: boolean;
+  custom_model_name?: string;
+  custom_model_repo?: string;
+  custom_model_filename?: string;
+  custom_model_runtime?: string;
+  custom_model_size_gb?: number;
   worker_action_budget?: number;
   checkpoint_every_actions?: number;
   max_runtime_minutes?: number;
@@ -303,6 +319,4 @@ export interface SettingsUpdate {
   allow_terminal?: boolean;
   allow_browser?: boolean;
   allow_file_tools?: boolean;
-  preferred_runtime_id?: string;
-  preferred_model_id?: string;
 }

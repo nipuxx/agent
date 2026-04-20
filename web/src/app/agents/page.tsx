@@ -1,6 +1,5 @@
-import { AgentsView } from "@/components/agents-view";
+import { WorkspaceView } from "@/components/workspace-view";
 
 export default function AgentsPage() {
-  return <AgentsView />;
+  return <WorkspaceView />;
 }
-

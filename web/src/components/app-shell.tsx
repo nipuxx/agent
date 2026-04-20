@@ -3,28 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, LayoutGrid, MessageSquareText, Settings2 } from "lucide-react";
+import { LayoutGrid, PanelsTopLeft } from "lucide-react";
 import type { ReactNode } from "react";
-import type { TelemetrySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/chat", label: "Console", icon: MessageSquareText },
-  { href: "/agents", label: "Agents", icon: Boxes },
+  { href: "/agents", label: "Agents", icon: PanelsTopLeft },
 ];
-
-function formatTelemetry(telemetry?: TelemetrySummary | null) {
-  if (!telemetry) {
-    return [];
-  }
-
-  return [
-    { label: "CPU", value: `${Math.round(telemetry.cpu_percent)}%` },
-    { label: "RAM", value: `${telemetry.ram_used_gb.toFixed(1)}GB` },
-    { label: "NODES", value: String(telemetry.node_count).padStart(2, "0") },
-  ];
-}
 
 function RailLink({
   href,
@@ -42,10 +28,10 @@ function RailLink({
       href={href}
       aria-label={label}
       className={cn(
-        "flex h-10 w-10 items-center justify-center border transition-colors duration-150",
+        "flex h-10 w-10 items-center justify-center border text-[var(--muted-foreground)] transition-colors",
         active
-          ? "border-white/10 bg-white/[0.03] text-[var(--foreground)]"
-          : "border-transparent text-[var(--muted-foreground)] hover:border-white/10 hover:bg-white/[0.025] hover:text-[var(--foreground)]",
+          ? "border-white/10 bg-white/[0.035] text-[var(--foreground)]"
+          : "border-transparent hover:border-white/10 hover:bg-white/[0.02] hover:text-[var(--foreground)]",
       )}
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
@@ -55,18 +41,16 @@ function RailLink({
 
 export function AppShell({
   children,
-  telemetry,
 }: {
   children: ReactNode;
-  telemetry?: TelemetrySummary | null;
+  telemetry?: unknown;
 }) {
   const pathname = usePathname();
-  const telemetryItems = formatTelemetry(telemetry);
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <div className="grid min-h-screen grid-cols-[60px_minmax(0,1fr)]">
-        <aside className="relative flex flex-col border-r border-[var(--border)] bg-black/20">
+        <aside className="relative flex flex-col border-r border-[var(--border)] bg-black/30">
           <div className="absolute inset-y-0 left-0 w-px bg-[#5f56d9]" />
 
           <div className="flex h-[52px] items-center justify-center border-b border-[var(--border)]">
@@ -92,40 +76,14 @@ export function AppShell({
           </nav>
 
           <div className="flex items-center justify-center border-t border-[var(--border)] py-5">
-            <RailLink
-              href="/settings"
-              active={pathname === "/settings"}
-              label="Settings"
-              icon={Settings2}
-            />
+            <span className="h-2 w-2 bg-[var(--foreground)]/42" />
           </div>
         </aside>
 
         <div className="min-w-0">
-          <header className="flex h-[52px] items-center justify-between border-b border-[var(--border)] px-4 md:px-6">
-            <div className="flex items-center gap-5">
-              <div className="nipux-mono text-[15px] uppercase tracking-[0.02em] text-[var(--foreground)]">
-                NIPUX_OS
-              </div>
-
-              {telemetryItems.length ? (
-                <div className="hidden items-center gap-6 lg:flex">
-                  {telemetryItems.map((item) => (
-                    <div
-                      key={item.label}
-                      className="nipux-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]"
-                    >
-                      <span>{item.label}</span>
-                      <span className="ml-2 text-[var(--foreground)]">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="nipux-mono flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--subtle-foreground)]">
-              <span className="inline-block h-1.5 w-1.5 bg-[var(--foreground)]/70" />
-              <span>READY</span>
+          <header className="flex h-[52px] items-center border-b border-[var(--border)] px-4 md:px-6">
+            <div className="nipux-mono text-[14px] uppercase tracking-[0.08em] text-[var(--foreground)]">
+              NIPUX
             </div>
           </header>
 

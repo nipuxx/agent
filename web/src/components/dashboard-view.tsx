@@ -1,166 +1,192 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
-import { startRuntime, stopRuntime } from "@/lib/api";
+import { getInstallTask, installRuntime, saveSettings, startRuntime, stopRuntime } from "@/lib/api";
 import { useLiveSummary } from "@/lib/use-live-summary";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-function compactModelLabel(model: string) {
-  const tail = model.split("/").pop() ?? model;
-  return tail.replace("kai-os/", "").replace("-GGUF", "").replace(/_/g, "");
-}
-
-function displayNodeLabel(label: string) {
-  return label
-    .replace(" agent", "")
-    .replace("Orchestrator", "Control")
-    .toUpperCase()
-    .replace(/\s+/g, "_");
-}
-
-function formatLatency(value: number) {
-  return value > 0 ? `${Math.round(value)}MS` : "0MS";
-}
-
-function formatRate(value: number) {
-  return value > 0 ? value.toFixed(1) : "0.0";
-}
-
-function formatTokenTotal(value: number) {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-
-  return `${(value / 1_000).toFixed(1)}K`;
-}
-
-function TrendBars({ values }: { values: number[] }) {
-  const peak = Math.max(...values, 1);
-
+function panelLabel(label: string) {
   return (
-    <div className="flex items-end gap-3">
-      {values.map((value, index) => (
-        <span
-          key={`${value}-${index}`}
-          className="block w-10 bg-[var(--foreground)]/92"
-          style={{ height: `${Math.max(18, (value / peak) * 68)}px`, opacity: 0.38 + index * 0.17 }}
-        />
-      ))}
+    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+      {label}
     </div>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="grid grid-cols-[1fr_auto] items-center border-b border-[var(--border)] py-3 last:border-b-0">
-      <span className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-        {label}
-      </span>
-      <span className="nipux-mono text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function NodeCard({
-  identifier,
-  label,
-  status,
-  model,
-  latencyMs,
-  tokensPerSec,
-  totalTokens,
-  trend,
-}: {
-  identifier: string;
-  label: string;
-  status: string;
-  model: string;
-  latencyMs: number;
-  tokensPerSec: number;
-  totalTokens: number;
-  trend: number[];
+function modelLabel(model: {
+  id: string;
+  family: string;
+  size: string;
+  quantization: string;
 }) {
-  return (
-    <article className="flex min-h-[292px] flex-col border-r border-b border-[var(--border)] px-5 py-5 md:px-6 md:py-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-          {identifier}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`h-2 w-2 ${status === "active" ? "bg-white/88" : "bg-white/22"}`} />
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--foreground)]/82">
-            {status}
-          </span>
-        </div>
-      </div>
-
-      <h3 className="mt-3 text-[30px] font-medium uppercase tracking-[-0.05em] text-[var(--foreground)] lg:text-[34px]">
-        {label}
-      </h3>
-
-      <div className="mt-8">
-        <StatRow label="Model" value={compactModelLabel(model)} />
-        <StatRow label="Latency" value={formatLatency(latencyMs)} />
-        <StatRow label="Tokens/Sec" value={formatRate(tokensPerSec)} />
-      </div>
-
-      <div className="mt-auto pt-8">
-        <TrendBars values={trend} />
-        <div className="mt-3 flex items-center justify-between">
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-            usage_trend
-          </span>
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-            T: {formatTokenTotal(totalTokens)}
-          </span>
-        </div>
-      </div>
-    </article>
-  );
+  if (model.id === "custom") {
+    return model.family === "Custom" ? "Custom model" : model.family;
+  }
+  return `${model.family} ${model.size} ${model.quantization}`;
 }
 
-function ClusterMetric({
+function Metric({
   label,
   value,
-  suffix,
 }: {
   label: string;
   value: string;
-  suffix?: string;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="border border-[var(--border)] px-4 py-4">
+      <div className="nipux-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
         {label}
       </div>
-      <div className="flex items-end gap-2">
-        <span className="text-[52px] font-medium leading-none tracking-[-0.06em] text-[var(--foreground)]">
-          {value}
-        </span>
-        {suffix ? (
-          <span className="pb-1 nipux-mono text-[13px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
-            {suffix}
-          </span>
-        ) : null}
+      <div className="mt-3 text-[28px] font-medium tracking-[-0.05em] text-[var(--foreground)]">
+        {value}
       </div>
-      <div className="h-px bg-[var(--border-strong)]" />
     </div>
   );
 }
 
 export function DashboardView() {
   const { summary, loading, error, refresh } = useLiveSummary();
+  const [runtimeChoice, setRuntimeChoice] = useState("");
+  const [modelChoice, setModelChoice] = useState("");
+  const [customModelName, setCustomModelName] = useState("");
+  const [customModelRepo, setCustomModelRepo] = useState("");
+  const [customModelFilename, setCustomModelFilename] = useState("");
+  const [customModelSizeGb, setCustomModelSizeGb] = useState("");
+  const [setupHydrated, setSetupHydrated] = useState(false);
+  const [installLogs, setInstallLogs] = useState<string[]>([]);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actionPending, setActionPending] = useState(false);
+
+  const modelOptions = useMemo(() => summary?.runtime_plan.model_options ?? [], [summary?.runtime_plan.model_options]);
+  const runtimeOptions = useMemo(
+    () => summary?.runtime_plan.runtime_options ?? [],
+    [summary?.runtime_plan.runtime_options],
+  );
+
+  useEffect(() => {
+    if (!summary || setupHydrated) {
+      return;
+    }
+    setRuntimeChoice(
+      summary.runtime_plan.runtime.id ||
+        summary.settings.preferred_runtime_id ||
+        runtimeOptions[0]?.id ||
+        "",
+    );
+    setModelChoice(
+      summary.settings.preferred_model_id ||
+        summary.runtime_plan.recommendation.selected_model_id ||
+        summary.runtime_plan.model?.id ||
+        "",
+    );
+    setCustomModelName(summary.settings.custom_model_name || "");
+    setCustomModelRepo(summary.settings.custom_model_repo || "");
+    setCustomModelFilename(summary.settings.custom_model_filename || "");
+    setCustomModelSizeGb(
+      summary.settings.custom_model_size_gb
+        ? String(summary.settings.custom_model_size_gb)
+        : "",
+    );
+    setSetupHydrated(true);
+  }, [runtimeOptions, setupHydrated, summary]);
+
+  useEffect(() => {
+    if (!summary?.runtime_state.install_task_id) {
+      setInstallLogs((current) => (current.length ? [] : current));
+      return;
+    }
+    let active = true;
+    const taskId = summary.runtime_state.install_task_id;
+    const timer = setInterval(() => {
+      void getInstallTask(taskId)
+        .then((task) => {
+          if (!active) {
+            return;
+          }
+          setInstallLogs(task.detail.logs ?? []);
+          if (task.status === "completed" || task.status === "failed") {
+            void refresh();
+          }
+        })
+        .catch(() => {});
+    }, 1500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [refresh, summary?.runtime_state.install_task_id]);
+
+  async function withPending<T>(key: string, task: () => Promise<T>) {
+    setPendingAction(key);
+    setActionError(null);
+    try {
+      return await task();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Action failed.");
+      throw err;
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  function settingsPayload() {
+    return {
+      preferred_runtime_id: runtimeChoice,
+      preferred_model_id: modelChoice,
+      custom_model_enabled: modelChoice === "custom",
+      custom_model_name: customModelName,
+      custom_model_repo: customModelRepo,
+      custom_model_filename: customModelFilename,
+      custom_model_runtime: runtimeChoice || summary?.runtime_plan.runtime.id || "llama.cpp",
+      custom_model_size_gb: Number(customModelSizeGb || 0),
+    };
+  }
+
+  async function handleSave() {
+    await withPending("save", async () => {
+      await saveSettings(settingsPayload());
+    });
+    await refresh();
+  }
+
+  async function handleInstall() {
+    await withPending("install", async () => {
+      await saveSettings(settingsPayload());
+      await installRuntime({
+        runtime_id: runtimeChoice,
+        model_id: modelChoice,
+      });
+    });
+    await refresh();
+  }
+
+  async function handleRuntimeToggle() {
+    if (!summary) {
+      return;
+    }
+    await withPending("runtime", async () => {
+      await saveSettings(settingsPayload());
+      if (summary.runtime_state.model_loaded) {
+        await stopRuntime();
+      } else {
+        await startRuntime({
+          runtime_id: runtimeChoice,
+          model_id: modelChoice,
+        });
+      }
+    });
+    await refresh();
+  }
 
   if (loading && !summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-          Booting Nipux control plane...
+        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+          Booting Nipux...
         </div>
       </AppShell>
     );
@@ -169,119 +195,202 @@ export function DashboardView() {
   if (!summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-center text-[15px] text-[var(--muted-foreground)]">
-          {error ?? "Nipux summary is unavailable."}
+        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+          {error ?? "Dashboard unavailable."}
         </div>
       </AppShell>
     );
   }
 
-  const heroNodes = summary.nodes.slice(0, 3);
-  const throughput = summary.telemetry.total_throughput_tps.toFixed(1);
-  const totalTokens = formatTokenTotal(summary.usage_summary.total_tokens);
-  const activeRuns = String(summary.runs.filter((run) => run.status === "running").length);
-
-  async function handlePrimaryAction() {
-    if (!summary) return;
-    setActionPending(true);
-    setActionError(null);
-    try {
-      if (summary.runtime_state.model_loaded) {
-        await stopRuntime();
-      } else {
-        await startRuntime();
-      }
-      await refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Runtime action failed.");
-    } finally {
-      setActionPending(false);
-    }
-  }
-
   return (
-    <AppShell telemetry={summary.telemetry}>
-      <div className="flex min-h-[calc(100vh-52px)] flex-col overflow-auto bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.035),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)]">
-        <section className="grid border-b border-[var(--border)] xl:grid-cols-[minmax(0,1fr)_280px]">
-          <div className="px-5 py-8 md:px-8 md:py-10">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-              SYSTEM STATUS: {summary.runtime_state.model_loaded ? "LIVE" : "READY"}
-            </div>
-            <h1 className="mt-6 max-w-[9ch] text-[clamp(56px,7vw,96px)] font-medium leading-[0.9] tracking-[-0.08em] text-[var(--foreground)]">
-              AGENT_CONTROL
-            </h1>
-            <p className="mt-6 max-w-[640px] text-[17px] leading-[1.7] text-[var(--muted-foreground)] md:text-[18px]">
-              Run long-horizon local agents through one clear control surface. Monitor
-              throughput, tokens, and live system state without fighting the interface.
-            </p>
-            {actionError ? (
-              <p className="mt-4 max-w-[720px] text-[14px] leading-[1.7] text-[#d8a499]">{actionError}</p>
-            ) : null}
-          </div>
-
-          <div className="flex items-center justify-end border-t border-[var(--border)] px-5 py-5 xl:border-l xl:border-t-0 xl:px-6">
-            <button
-              type="button"
-              onClick={() => void handlePrimaryAction()}
-              disabled={actionPending}
-              className="h-[64px] w-full max-w-[208px] border border-[var(--foreground)] bg-[var(--foreground)] px-6 nipux-mono text-[13px] uppercase tracking-[0.16em] text-black transition-opacity hover:opacity-92"
-            >
-              {summary.runtime_state.model_loaded ? "STOP_RUNTIME" : actionPending ? "STARTING..." : "START_RUNTIME"}
-            </button>
-          </div>
-        </section>
-
-        <section className="grid xl:grid-cols-[repeat(3,minmax(0,1fr))]">
-          {heroNodes.map((node) => (
-            <NodeCard
-              key={node.id}
-              identifier={node.identifier}
-              label={displayNodeLabel(node.label)}
-              status={node.status}
-              model={node.model}
-              latencyMs={node.latency_ms}
-              tokensPerSec={node.tokens_per_sec}
-              totalTokens={node.total_tokens}
-              trend={node.trend}
-            />
-          ))}
-        </section>
-
-        <section className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1.62fr)_340px]">
-          <div className="border-r border-t border-[var(--border)] px-5 py-6 md:px-8 md:py-7">
-            <div className="flex items-center justify-between gap-4">
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--foreground)]/92">
-                TERMINAL_LOG_OUTPUT
+    <AppShell>
+      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px]">
+        <main className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] border-r border-[var(--border)]">
+          <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
+            {panelLabel("dashboard")}
+            <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h1 className="text-[30px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                  Runtime control
+                </h1>
+                <p className="mt-3 max-w-[640px] text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
+                  Choose a runtime, choose a model, install it through the backend, and
+                  then move to Agents to assign actual work.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={summary.runtime_state.model_loaded ? "success" : "secondary"}>
+                  {summary.runtime_state.model_loaded ? "runtime live" : "runtime stopped"}
+                </Badge>
               </div>
             </div>
+            {actionError ? (
+              <p className="mt-4 text-[13px] leading-[1.6] text-[#d8a499]">{actionError}</p>
+            ) : null}
+          </header>
 
-            <div className="mt-8 space-y-4 overflow-hidden nipux-mono text-[14px] leading-[1.8] text-[var(--foreground)]/88 md:text-[15px]">
-              {summary.log_lines.map((line, index) => {
-                const isWarn = line.includes("WARN");
+          <div className="grid gap-px bg-[var(--border)] md:grid-cols-2">
+            <section className="bg-[var(--background)] px-5 py-5 md:px-6">
+              {panelLabel("install")}
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Runtime
+                  </label>
+                  <select
+                    value={runtimeChoice}
+                    onChange={(event) => setRuntimeChoice(event.target.value)}
+                    className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
+                  >
+                    {runtimeOptions.map((runtime) => (
+                      <option key={runtime.id} value={runtime.id} className="bg-[var(--background)]">
+                        {runtime.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                return (
-                  <div key={`${line}-${index}`} className={isWarn ? "text-[#d8a499]" : undefined}>
-                    {line}
-                  </div>
-                );
-              })}
-              <div>&gt; ■</div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Model
+                  </label>
+                  <select
+                    value={modelChoice}
+                    onChange={(event) => setModelChoice(event.target.value)}
+                    className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
+                  >
+                    {modelOptions.map((model) => (
+                      <option key={model.id} value={model.id} className="bg-[var(--background)]">
+                        {modelLabel(model)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {modelChoice === "custom" ? (
+                  <>
+                    <Input
+                      value={customModelName}
+                      onChange={(event) => setCustomModelName(event.target.value)}
+                      placeholder="Custom model label"
+                    />
+                    <Input
+                      value={customModelRepo}
+                      onChange={(event) => setCustomModelRepo(event.target.value)}
+                      placeholder="Hugging Face repo or file URL"
+                    />
+                    <Input
+                      value={customModelFilename}
+                      onChange={(event) => setCustomModelFilename(event.target.value)}
+                      placeholder="Filename override (optional)"
+                    />
+                    <Input
+                      value={customModelSizeGb}
+                      onChange={(event) => setCustomModelSizeGb(event.target.value)}
+                      placeholder="Approx size in GB"
+                    />
+                    <p className="text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                      Paste either a repo link like <span className="text-[var(--foreground)]">huggingface.co/org/model</span> or a direct file link like <span className="text-[var(--foreground)]">.../resolve/main/model.gguf</span>.
+                    </p>
+                  </>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void handleSave()} disabled={pendingAction === "save"}>
+                    Save
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void handleInstall()} disabled={pendingAction === "install"}>
+                    Install
+                  </Button>
+                  <Button size="sm" onClick={() => void handleRuntimeToggle()} disabled={pendingAction === "runtime"}>
+                    {summary.runtime_state.model_loaded ? "Stop runtime" : "Start runtime"}
+                  </Button>
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-[var(--background)] px-5 py-5 md:px-6">
+              {panelLabel("recommended")}
+              <div className="mt-4 space-y-4 text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
+                <p>
+                  Carnice is the recommended install path right now:
+                </p>
+                <div className="space-y-2">
+                  <a
+                    href="https://huggingface.co/kai-os/Carnice-9b-GGUF"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-[var(--foreground)]"
+                  >
+                    Carnice-9b-GGUF
+                  </a>
+                  <a
+                    href="https://huggingface.co/kai-os/Carnice-27b-GGUF"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-[var(--foreground)]"
+                  >
+                    Carnice-27b-GGUF
+                  </a>
+                </div>
+                <div className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--foreground)]/84">
+                  {summary.runtime_plan.install_plan.blocked ? "CURRENT PLAN BLOCKED" : "CURRENT PLAN SUPPORTED"}
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section className="min-h-0 overflow-auto border-t border-[var(--border)] px-5 py-5 md:px-6">
+            {panelLabel("system log")}
+            <div className="mt-4 space-y-3 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/78">
+              {(installLogs.length ? installLogs.slice(-8) : summary.log_lines.slice(-8)).map((line, index) => (
+                <div key={`${line}-${index}`}>{line}</div>
+              ))}
+              {!installLogs.length && !summary.log_lines.length ? (
+                <div className="text-[var(--muted-foreground)]">No log output yet.</div>
+              ) : null}
+            </div>
+          </section>
+        </main>
+
+        <aside className="min-h-0 min-w-0 overflow-auto px-5 py-5 md:px-6">
+          {panelLabel("status")}
+          <div className="mt-4 grid gap-3">
+            <Metric label="Agents" value={String(summary.agents.length)} />
+            <Metric label="Total tokens" value={String(summary.usage_summary.total_tokens)} />
+            <Metric label="Throughput" value={`${summary.telemetry.total_throughput_tps.toFixed(1)} tok/s`} />
+          </div>
+
+          <div className="mt-6 border border-[var(--border)] px-4 py-4">
+            {panelLabel("runtime")}
+            <div className="mt-4 space-y-3 text-[14px] leading-[1.7] text-[var(--muted-foreground)]">
+              <div>Runtime: {summary.runtime_plan.runtime.label}</div>
+              <div>Model: {summary.runtime_plan.model ? modelLabel(summary.runtime_plan.model) : "None"}</div>
+              <div>Disk footprint: {summary.runtime_plan.install_plan.estimated_disk_needed_gb.toFixed(1)} GB</div>
             </div>
           </div>
 
-          <aside className="border-t border-[var(--border)] px-5 py-6 md:px-8 md:py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--foreground)]/92">
-              CLUSTER_METRICS
+          <div className="mt-6 border border-[var(--border)] px-4 py-4">
+            {panelLabel("recent agents")}
+            <div className="mt-4 space-y-3">
+              {summary.agents.length ? (
+                summary.agents.slice(0, 6).map((agent) => (
+                  <div key={agent.id} className="flex items-center justify-between gap-3">
+                    <div className="text-[14px] text-[var(--foreground)]">{agent.name}</div>
+                    <Badge variant={agent.status === "running" ? "success" : "secondary"}>
+                      {agent.status}
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <div className="text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  No agents yet. Go to Agents and create one after the runtime is configured.
+                </div>
+              )}
             </div>
-
-            <div className="mt-10 space-y-9">
-              <ClusterMetric label="Total Throughput" value={throughput} suffix="TOK/S" />
-              <ClusterMetric label="Total Tokens" value={totalTokens} />
-              <ClusterMetric label="Active Runs" value={activeRuns} />
-            </div>
-          </aside>
-        </section>
-      </div>
+          </div>
+        </aside>
+      </section>
     </AppShell>
   );
 }
