@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { AppShell } from "./app-shell";
 import { BrowserPane } from "./browser-pane";
@@ -14,6 +15,7 @@ import {
   stopAgent,
   updateAgent,
 } from "@/lib/api";
+import { isSetupComplete } from "@/lib/setup";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +40,7 @@ function statusVariant(status: string) {
 }
 
 export function WorkspaceView() {
+  const router = useRouter();
   const { summary, loading, error, refresh } = useLiveSummary();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -61,6 +64,13 @@ export function WorkspaceView() {
         ["queued", "planning", "running", "paused"].includes(run.status),
     ) ?? null;
   const { bundle } = useThreadBundle(selectedThreadId);
+
+  useEffect(() => {
+    if (!summary || isSetupComplete(summary.settings)) {
+      return;
+    }
+    router.replace("/setup");
+  }, [router, summary]);
 
   useEffect(() => {
     if (selectedAgentId && agents.some((agent) => agent.id === selectedAgentId)) {
@@ -236,6 +246,16 @@ export function WorkspaceView() {
       <AppShell>
         <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
           {error ?? "Agents are unavailable."}
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (!isSetupComplete(summary.settings)) {
+    return (
+      <AppShell>
+        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+          Opening setup…
         </div>
       </AppShell>
     );

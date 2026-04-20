@@ -15,6 +15,7 @@ LEGACY_STATE_PATH = NIPUX_HOME / "state.json"
 LEGACY_DEMO_AGENT_IDS = ("browser", "code", "terminal", "orchestrator")
 
 DEFAULT_APP_SETTINGS = {
+    "setup_completed": False,
     "provider_mode": "local",
     "openai_base_url": "",
     "openai_api_key": "",

@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_NIPUXD_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:9384";
+  process.env.NEXT_PUBLIC_NIPUXD_URL?.replace(/\/$/, "") ?? "/api/nipux";
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
