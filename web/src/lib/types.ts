@@ -38,49 +38,98 @@ export interface TelemetrySummary {
   total_throughput_tps: number;
 }
 
-export interface HermesStatusSummary {
-  installed: boolean;
-  configured: boolean;
-  version?: string | null;
-  binary?: string | null;
-  home: string;
-  config_path: string;
-  env_path: string;
-  state_db_path: string;
-  logs_path: string;
-  gateway_running: boolean;
-  install_command: string;
-}
-
-export interface HermesSettingsSummary {
-  installed: boolean;
-  configured: boolean;
-  binary?: string | null;
-  home: string;
-  config_path: string;
-  env_path: string;
-  model: string;
-  toolsets: string[];
-  max_turns: number;
-  terminal_backend: string;
-  terminal_cwd: string;
-  compression_enabled: boolean;
-  compression_threshold: number;
-  display_personality: string;
-  openai_base_url: string;
-  openrouter_api_key_set: boolean;
-  openrouter_api_key_hint: string;
-  openai_api_key_set: boolean;
-  openai_api_key_hint: string;
-}
-
 export interface RuntimeStateSummary {
+  runtime_id?: string | null;
   status: string;
   model_loaded: boolean;
   active_model_id?: string | null;
   recommended_model_id?: string | null;
   endpoint?: string | null;
+  model_path?: string | null;
   started_at?: number | null;
+  install_task_id?: string | null;
+  pid?: number | null;
+  health?: Record<string, unknown>;
+  last_health?: Record<string, unknown>;
+  last_error?: string | null;
+}
+
+export interface RuntimeModel {
+  id: string;
+  family: string;
+  size: string;
+  quantization: string;
+  runtime: string;
+  artifact_kind: string;
+  min_vram_gb: number;
+  target_vram_gb: number;
+  target_ram_gb: number;
+  repo: string;
+  filename: string;
+  notes: string;
+}
+
+export interface RuntimeRecommendation {
+  supported: boolean;
+  selected_model_id?: string | null;
+  selected?: RuntimeModel | null;
+  effective_vram_gb?: number;
+  estimated_tokens_per_second?: number;
+  estimated_cost_per_million_tokens_usd?: number;
+  reason: string;
+  platform_track?: string | null;
+}
+
+export interface RuntimePlan {
+  system: SystemSummary;
+  recommendation: RuntimeRecommendation;
+  runtime: {
+    id: string;
+    label: string;
+    reason: string;
+  };
+  runtime_profile?: {
+    id: string;
+    label: string;
+    best_for: string;
+    install_size_gb: number;
+    network_exposed: boolean;
+    supports_apple: boolean;
+  } | null;
+  model?: RuntimeModel | null;
+  runtime_options?: Array<{
+    id: string;
+    label: string;
+    best_for: string;
+    install_size_gb: number;
+    network_exposed: boolean;
+    supports_apple: boolean;
+  }>;
+  model_options?: RuntimeModel[];
+  install_plan: {
+    estimated_disk_needed_gb: number;
+    requires_confirmation: boolean;
+    warnings: string[];
+    steps: string[];
+    blocked: boolean;
+    capability_reason?: string | null;
+  };
+}
+
+export interface NipuxSettings {
+  provider_mode: string;
+  openai_base_url: string;
+  openai_api_key?: string;
+  openai_model: string;
+  worker_action_budget: number;
+  checkpoint_every_actions: number;
+  max_runtime_minutes: number;
+  browser_headless: boolean;
+  browser_viewport: { width: number; height: number };
+  workspace_root: string;
+  allow_terminal: boolean;
+  allow_browser: boolean;
+  allow_file_tools: boolean;
 }
 
 export interface NodeSummary {
@@ -96,6 +145,8 @@ export interface NodeSummary {
   uptime_seconds: number;
   description: string;
   trend: number[];
+  browser_session_id?: string | null;
+  browser_url?: string | null;
 }
 
 export interface UsageSummary {
@@ -108,50 +159,150 @@ export interface UsageSummary {
   savings_vs_api_usd?: number | null;
 }
 
-export interface ApiReferencePricing {
-  provider: string;
-  model_id: string;
+export interface AgentRecord {
+  id: string;
+  name: string;
   label: string;
-  prompt_per_million_usd: number;
-  completion_per_million_usd: number;
-  blended_per_million_usd: number;
-  context_length?: number | null;
-  source_url: string;
-  checked_at?: number | null;
+  description: string;
+  system_prompt: string;
+  toolsets: string[];
+  model_policy: Record<string, unknown>;
+  runtime_policy: Record<string, unknown>;
+  hermes_overrides: Record<string, unknown>;
+  created_at: number;
+  updated_at: number;
+  last_session_id?: string | null;
+  status: string;
+}
+
+export interface ThreadRecord {
+  id: string;
+  agent_id: string;
+  title: string;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ThreadMessage {
+  id: string;
+  thread_id: string;
+  session_id?: string | null;
+  role: string;
+  kind: string;
+  label: string;
+  body: string;
+  created_at: number;
+}
+
+export interface ThreadBundle {
+  thread: ThreadRecord;
+  messages: ThreadMessage[];
+}
+
+export interface InstallTask {
+  id: string;
+  kind: string;
+  runtime_id?: string | null;
+  status: string;
+  plan: RuntimePlan;
+  detail: {
+    logs?: string[];
+    [key: string]: unknown;
+  };
+  created_at: number;
+  updated_at: number;
+}
+
+export interface NipuxEvent {
+  id: number;
+  stream_type: string;
+  stream_id: string;
+  event_type: string;
+  level: string;
+  payload: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface BrowserSession {
+  id: string;
+  agent_id: string;
+  status: string;
+  control_mode: string;
+  current_url: string;
+  title: string;
+  last_frame_path?: string | null;
+  created_at: number;
+  updated_at: number;
+  frame_path?: string;
+  excerpt?: string;
+  url?: string;
+  captured_at?: number;
+}
+
+export interface RunRecord {
+  id: string;
+  thread_id: string;
+  agent_id: string;
+  goal: string;
+  status: string;
+  success_criteria: Record<string, unknown>;
+  budget: Record<string, unknown>;
+  top_task_id?: string | null;
+  current_checkpoint_id?: string | null;
+  report: Record<string, unknown>;
+  started_at?: number | null;
+  ended_at?: number | null;
+  created_at: number;
+  updated_at: number;
+  last_error?: string | null;
+}
+
+export interface TaskNode {
+  id: string;
+  run_id: string;
+  parent_id?: string | null;
+  kind: string;
+  title: string;
+  objective: string;
+  inputs: Record<string, unknown>;
+  constraints: Record<string, unknown>;
+  verifier: Record<string, unknown>;
+  budget: Record<string, unknown>;
+  status: string;
+  assigned_agent_id?: string | null;
+  attempt_count: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface NipuxSummary {
   product: string;
   system: SystemSummary;
   telemetry: TelemetrySummary;
-  hermes: HermesStatusSummary;
-  settings: HermesSettingsSummary;
+  settings: NipuxSettings;
   runtime_state: RuntimeStateSummary;
+  runtime_plan: RuntimePlan;
   nodes: NodeSummary[];
   log_lines: string[];
   usage_summary: UsageSummary;
-  api_reference?: ApiReferencePricing | null;
-  agents: Array<{
-    id: string;
-    label: string;
-    description: string;
-    mode: string;
-    status: string;
-    started_at?: number | null;
-    uptime_seconds: number;
-  }>;
+  agents: AgentRecord[];
+  runs: RunRecord[];
 }
 
-export interface HermesSettingsUpdate {
-  model?: string;
-  toolsets?: string[] | string;
-  max_turns?: number;
-  terminal_backend?: string;
-  terminal_cwd?: string;
-  compression_enabled?: boolean;
-  compression_threshold?: number;
-  display_personality?: string;
+export interface SettingsUpdate {
+  provider_mode?: string;
   openai_base_url?: string;
-  openrouter_api_key?: string;
   openai_api_key?: string;
+  openai_model?: string;
+  worker_action_budget?: number;
+  checkpoint_every_actions?: number;
+  max_runtime_minutes?: number;
+  browser_headless?: boolean;
+  workspace_root?: string;
+  allow_terminal?: boolean;
+  allow_browser?: boolean;
+  allow_file_tools?: boolean;
+  preferred_runtime_id?: string;
+  preferred_model_id?: string;
 }

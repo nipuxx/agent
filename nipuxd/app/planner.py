@@ -132,7 +132,7 @@ def estimate_cost_per_million_tokens(model: dict, estimated_tps: float) -> float
     return round(kwh * 0.15, 2)
 
 
-def build_install_plan(system: dict, recommendation: dict, runtime: dict, hermes: dict) -> dict:
+def build_install_plan(system: dict, recommendation: dict, runtime: dict, _legacy: dict | None = None) -> dict:
     install_size = 0.0
     runtime_row = next((row for row in RUNTIME_PROFILES if row["id"] == runtime["id"]), None)
     if runtime_row:
@@ -142,8 +142,6 @@ def build_install_plan(system: dict, recommendation: dict, runtime: dict, hermes
         install_size += selected["target_vram_gb"]
 
     warnings: list[str] = []
-    if not hermes["installed"]:
-        warnings.append("Hermes Agent is not installed yet and will need to be bootstrapped.")
     if recommendation.get("supported") is False:
         warnings.append("This host does not currently meet the minimum Carnice footprint.")
     if system["disk_free_gb"] < install_size + 10:
@@ -155,10 +153,10 @@ def build_install_plan(system: dict, recommendation: dict, runtime: dict, hermes
         "warnings": warnings,
         "steps": [
             "Wait for the user to confirm the plan inside the Nipux onboarding flow.",
-            "Create a Nipux-managed Hermes home and profile directory.",
             f"Install or validate the {runtime['label']} runtime.",
             "Download the recommended Carnice build.",
-            "Generate a Nipux-owned Hermes config that targets the local model endpoint.",
-            "Expose the Nipux UI on the local network and keep Hermes behind the daemon boundary.",
+            "Create the Nipux workspace, browser, and long-run harness directories.",
+            "Start the local runtime and verify the OpenAI-compatible health endpoint.",
+            "Keep the runtime isolated behind nipuxd and stream live status into the UI.",
         ],
     }

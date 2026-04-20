@@ -1,34 +1,21 @@
 # Nipux
 
-Nipux is a local-first control plane for running Hermes Agent with the right local model, runtime, and quantization for the machine in front of it.
-
-The core idea is simple:
-
-- `nipuxd` detects hardware, builds an install plan, chooses a runtime, and manages Hermes as an external dependency.
-- The web UI talks only to `nipuxd`.
-- Hermes stays isolated behind a stable process boundary so upstream Hermes updates do not force UI rewrites.
+Nipux is a local-first control plane for long-running agents. It picks the right local runtime for the host, exposes a stable web UI, and runs a Nipux-native harness built around runs, tasks, checkpoints, browser sessions, and durable logs.
 
 ## Product Direction
 
-Nipux is designed around three jobs:
+Nipux is built around four jobs:
 
-1. Detect the host and decide whether it should run `Carnice-9b` or `Carnice-27b`.
-2. Pick the safest quantization and runtime for the available VRAM, unified memory, and bandwidth budget.
-3. Stand up a browser-based interface for chat, agent control, install flow, and Hermes-backed sessions.
-
-The current implementation in this repo includes:
-
-- A FastAPI daemon for hardware detection and planning
-- Apple Silicon detection with an `MLX` inference path
-- A Next.js web UI with a minimal `vLLM Studio` / `Open WebUI`-inspired layout
-- A clean architecture for isolating Hermes Agent from the UI
-- Bootstrap scripts for local development
+1. Detect the host and choose the right local runtime path.
+2. Pick a compatible Carnice model and quantization for the available VRAM, unified memory, and bandwidth budget.
+3. Run bounded long-horizon agent loops with checkpoints, live browser control, and persisted state.
+4. Expose all of that through one local web interface.
 
 ## Repository Layout
 
 ```text
 docs/                  Architecture and product notes
-nipuxd/                Local control daemon
+nipuxd/                Local control daemon and agent harness
 scripts/               Install and development entrypoints
 web/                   Browser UI
 ```
@@ -45,42 +32,23 @@ bash scripts/dev.sh
 Then open:
 
 - `http://127.0.0.1:3000`
-- or `http://<your-lan-ip>:3000` if you bind onto the network
 
-## Architecture Promise
+## Current Architecture
 
-Nipux does not embed Hermes internals into the UI.
+The main boundary is simple:
 
-Instead:
+- the web UI talks only to `nipuxd`
+- `nipuxd` owns hardware detection, runtime management, state storage, browser control, and long-run orchestration
+- the agent harness is Nipux-native, not delegated to Hermes
 
-- `nipuxd` owns the stable HTTP contract
-- Hermes is treated as an external tool/runtime
-- Nipux profiles and config live under a managed Nipux directory
-- Hermes can be upgraded independently as long as the adapter contract still holds
+## Runtime Philosophy
 
-## Install Philosophy
+Nipux does not install runtimes or model weights just because the repo was bootstrapped.
 
-Nipux does not install runtimes or model weights just because you ran the bootstrap script.
-
-The bootstrap script only installs the Nipux application itself:
+The bootstrap script installs:
 
 - Python dependencies for `nipuxd`
+- Playwright + Chromium for browser sessions
 - Node dependencies for the web UI
 
-Runtime installation and model download are intentionally deferred to the UI onboarding flow so the
-user can review the machine plan first.
-
-## Current Model Heuristics
-
-Nipux currently assumes the following default ladder:
-
-- `< 8 GB` usable VRAM: unsupported for Carnice
-- `8 GB`: `Carnice-9b Q4_K_M`
-- `12 GB`: `Carnice-9b Q6_K`
-- `16 GB`: `Carnice-9b Q8_0`
-- `24 GB`: `Carnice-27b Q4_K_M`
-- `32 GB`: `Carnice-27b Q8_0`
-
-For Apple Silicon, Nipux also exposes an `MLX` track based on usable unified-memory budget.
-
-These values are intentionally conservative and are surfaced through the daemon API so they can be tuned without rewriting the frontend.
+Model/runtime installation stays behind the UI so the user can review the machine plan first.

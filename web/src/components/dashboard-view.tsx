@@ -1,367 +1,286 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
-import { AppShell } from "./app-shell";
-import { Button } from "@/components/ui/button";
-import { getSummary, loadModel, startNode, stopNode, unloadModel } from "@/lib/api";
-import type { NipuxSummary, NodeSummary } from "@/lib/types";
+import { useState } from "react";
 
-function formatCount(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
-}
+import { AppShell } from "./app-shell";
+import { startRuntime, stopRuntime } from "@/lib/api";
+import { useLiveSummary } from "@/lib/use-live-summary";
 
 function compactModelLabel(model: string) {
-  const lower = model.toLowerCase();
-  if (lower.includes("35b-a3b")) return "QWEN3.5-35B-A3B";
-  if (lower.includes("27b")) return "CARNICE-27B";
-  if (lower.includes("9b")) return "CARNICE-9B";
-  return model.split("/").pop()?.split(":")[0]?.toUpperCase() ?? model.toUpperCase();
+  const tail = model.split("/").pop() ?? model;
+  return tail.replace("kai-os/", "").replace("-GGUF", "").replace(/_/g, "");
 }
 
-function compactLogLine(line: string) {
-  const flattened = line.replace(/\s+/g, " ").trim();
-  if (flattened.length <= 102) return flattened;
-  return `${flattened.slice(0, 99)}...`;
+function displayNodeLabel(label: string) {
+  return label
+    .replace(" agent", "")
+    .replace("Orchestrator", "Control")
+    .toUpperCase()
+    .replace(/\s+/g, "_");
 }
 
-function formatUptime(startedAt?: number | null) {
-  if (!startedAt) return "000:00:00";
-  const diff = Math.max(0, Math.floor(Date.now() / 1000 - startedAt));
-  const hours = Math.floor(diff / 3600);
-  const minutes = Math.floor((diff % 3600) / 60);
-  const seconds = diff % 60;
-  return `${String(hours).padStart(3, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+function formatLatency(value: number) {
+  return value > 0 ? `${Math.round(value)}MS` : "0MS";
 }
 
-function trendLabel(node: NodeSummary) {
-  if (node.status === "active" && node.tokens_per_sec > 18) return "HEAVY_LOAD";
-  if (node.status === "active") return "USAGE_TREND";
-  return "STANDBY_MODE";
+function formatRate(value: number) {
+  return value > 0 ? value.toFixed(1) : "0.0";
 }
 
-function metricsFromSummary(summary: NipuxSummary) {
-  const throughput = summary.telemetry.total_throughput_tps;
-  const cpu = Math.max(summary.telemetry.cpu_percent, 1);
-  const network = Math.min(
-    99.99,
-    98.9 + (summary.telemetry.active_nodes / Math.max(summary.telemetry.node_count, 1)) * 0.92,
+function formatTokenTotal(value: number) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+
+  return `${(value / 1_000).toFixed(1)}K`;
+}
+
+function TrendBars({ values }: { values: number[] }) {
+  const peak = Math.max(...values, 1);
+
+  return (
+    <div className="flex items-end gap-3">
+      {values.map((value, index) => (
+        <span
+          key={`${value}-${index}`}
+          className="block w-10 bg-[var(--foreground)]/92"
+          style={{ height: `${Math.max(18, (value / peak) * 68)}px`, opacity: 0.38 + index * 0.17 }}
+        />
+      ))}
+    </div>
   );
-  const efficiency = Math.min(0.99, throughput / (cpu * 3.8));
-  return {
-    throughput,
-    network,
-    efficiency,
-  };
+}
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[1fr_auto] items-center border-b border-[var(--border)] py-3 last:border-b-0">
+      <span className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        {label}
+      </span>
+      <span className="nipux-mono text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
+        {value}
+      </span>
+    </div>
+  );
 }
 
 function NodeCard({
-  node,
-  cardLabel,
-  pending,
-  onToggle,
+  identifier,
+  label,
+  status,
+  model,
+  latencyMs,
+  tokensPerSec,
+  totalTokens,
+  trend,
 }: {
-  node: NodeSummary;
-  cardLabel: string;
-  pending: boolean;
-  onToggle: () => void;
+  identifier: string;
+  label: string;
+  status: string;
+  model: string;
+  latencyMs: number;
+  tokensPerSec: number;
+  totalTokens: number;
+  trend: number[];
 }) {
-  const active = node.status === "active";
-
   return (
-    <article className="flex min-h-[398px] flex-col border-r border-[var(--border)] px-7 py-7 last:border-r-0 xl:min-h-[424px]">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="nipux-mono text-[10px] uppercase tracking-[0.3em] text-[var(--muted-foreground)]">
-            NODE_IDENTIFIER
-          </div>
-          <div className="mt-4 nipux-display text-[58px] uppercase leading-[0.86] lg:text-[64px]">
-            {cardLabel}
-          </div>
+    <article className="flex min-h-[292px] flex-col border-r border-b border-[var(--border)] px-5 py-5 md:px-6 md:py-6">
+      <div className="flex items-center justify-between gap-3">
+        <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          {identifier}
         </div>
-        <div className="flex items-center gap-2 pt-1">
-          <span className="h-2.5 w-2.5 bg-white/35" />
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--foreground)]">
-            {active ? "ACTIVE" : "IDLE"}
+        <div className="flex items-center gap-2">
+          <span className={`h-2 w-2 ${status === "active" ? "bg-white/88" : "bg-white/22"}`} />
+          <span className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--foreground)]/82">
+            {status}
           </span>
         </div>
       </div>
 
-      <div className="mt-12 grid gap-5">
-          <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-            <span className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              MODEL
-            </span>
-            <span className="nipux-mono text-[12px] uppercase tracking-[0.12em]">{compactModelLabel(node.model)}</span>
-          </div>
-        <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-            LATENCY
-          </span>
-          <span className="nipux-mono text-[12px] uppercase tracking-[0.12em]">
-            {node.latency_ms.toFixed(0)}MS
-          </span>
-        </div>
-        <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-          <span className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-            TOKENS/SEC
-          </span>
-          <span className="nipux-mono text-[12px] uppercase tracking-[0.12em]">
-            {node.tokens_per_sec.toFixed(1)}
-          </span>
-        </div>
+      <h3 className="mt-3 text-[30px] font-medium uppercase tracking-[-0.05em] text-[var(--foreground)] lg:text-[34px]">
+        {label}
+      </h3>
+
+      <div className="mt-8">
+        <StatRow label="Model" value={compactModelLabel(model)} />
+        <StatRow label="Latency" value={formatLatency(latencyMs)} />
+        <StatRow label="Tokens/Sec" value={formatRate(tokensPerSec)} />
       </div>
 
-      <div className="mt-auto pt-14">
-        <div className="flex h-[82px] items-end gap-3">
-          {node.trend.slice(0, 6).map((value, index) => (
-            <div
-              key={`${node.id}-${index}`}
-              className={active ? (index % 2 === 0 ? "bg-white" : "bg-white/75") : "bg-white/10"}
-              style={{ width: "14.8%", height: `${Math.max(14, Math.min(74, value))}px` }}
-            />
-          ))}
-        </div>
-        <div className="mt-4 flex items-center justify-between">
-          <span className="nipux-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            {trendLabel(node)}
+      <div className="mt-auto pt-8">
+        <TrendBars values={trend} />
+        <div className="mt-3 flex items-center justify-between">
+          <span className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+            usage_trend
           </span>
-          <span className="nipux-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            T: {formatCount(node.total_tokens)}
+          <span className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+            T: {formatTokenTotal(totalTokens)}
           </span>
         </div>
-      </div>
-
-      <div className="mt-6 xl:hidden">
-        <Button variant={active ? "outline" : "default"} size="sm" onClick={onToggle} disabled={pending}>
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : active ? "STOP_NODE" : "DEPLOY_NODE"}
-        </Button>
       </div>
     </article>
   );
 }
 
-function SlotCard({
-  runtimeLoaded,
-  pending,
-  onLoadToggle,
+function ClusterMetric({
+  label,
+  value,
+  suffix,
 }: {
-  runtimeLoaded: boolean;
-  pending: boolean;
-  onLoadToggle: () => void;
+  label: string;
+  value: string;
+  suffix?: string;
 }) {
   return (
-    <article className="flex min-h-[398px] flex-col items-center justify-center gap-8 px-8 py-7 xl:min-h-[424px]">
-      <div className="flex h-[92px] w-[92px] items-center justify-center border border-dashed border-white/35 text-white/75">
-        <Plus className="h-9 w-9" strokeWidth={1.2} />
+    <div className="space-y-4">
+      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        {label}
       </div>
-      <div className="text-center">
-        <div className="nipux-mono text-[11px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-          INITIALIZE_SLOT_04
-        </div>
+      <div className="flex items-end gap-2">
+        <span className="text-[52px] font-medium leading-none tracking-[-0.06em] text-[var(--foreground)]">
+          {value}
+        </span>
+        {suffix ? (
+          <span className="pb-1 nipux-mono text-[13px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+            {suffix}
+          </span>
+        ) : null}
       </div>
-      <Button variant={runtimeLoaded ? "outline" : "default"} size="sm" onClick={onLoadToggle} disabled={pending}>
-        {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : runtimeLoaded ? "UNLOAD" : "DEPLOY"}
-      </Button>
-    </article>
+      <div className="h-px bg-[var(--border-strong)]" />
+    </div>
   );
 }
 
-export function DashboardView({ initialSummary }: { initialSummary?: NipuxSummary | null }) {
-  const [summary, setSummary] = useState<NipuxSummary | null>(initialSummary ?? null);
-  const [pendingTarget, setPendingTarget] = useState<string | null>(null);
+export function DashboardView() {
+  const { summary, loading, error, refresh } = useLiveSummary();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const refresh = async () => {
-      const next = await getSummary();
-      if (mounted) setSummary(next);
-    };
-
-    void refresh();
-    const timer = window.setInterval(refresh, 5000);
-    return () => {
-      mounted = false;
-      window.clearInterval(timer);
-    };
-  }, []);
-
-  const metrics = useMemo(() => (summary ? metricsFromSummary(summary) : null), [summary]);
-
-  if (!summary || !metrics) {
+  if (loading && !summary) {
     return (
       <AppShell>
-        <div className="px-8 py-8">
-          <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-            BOOTING_NIPUX_SURFACE
-          </div>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          Booting Nipux control plane...
         </div>
       </AppShell>
     );
   }
 
-  const topNodes = summary.nodes.slice(0, 3);
-  const displayLogLines = summary.log_lines.slice(0, 10).map(compactLogLine);
-
-  const runAction = async (target: string, task: () => Promise<NipuxSummary>) => {
-    setPendingTarget(target);
-    const next = await task();
-    setSummary(next);
-    setPendingTarget(null);
-  };
-
+  if (!summary) {
     return (
+      <AppShell>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-center text-[15px] text-[var(--muted-foreground)]">
+          {error ?? "Nipux summary is unavailable."}
+        </div>
+      </AppShell>
+    );
+  }
+
+  const heroNodes = summary.nodes.slice(0, 3);
+  const throughput = summary.telemetry.total_throughput_tps.toFixed(1);
+  const totalTokens = formatTokenTotal(summary.usage_summary.total_tokens);
+  const activeRuns = String(summary.runs.filter((run) => run.status === "running").length);
+
+  async function handlePrimaryAction() {
+    if (!summary) return;
+    setActionPending(true);
+    setActionError(null);
+    try {
+      if (summary.runtime_state.model_loaded) {
+        await stopRuntime();
+      } else {
+        await startRuntime();
+      }
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Runtime action failed.");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  return (
     <AppShell telemetry={summary.telemetry}>
-      <div className="grid min-h-[calc(100vh-52px)] xl:grid-rows-[238px_392px_minmax(0,1fr)_28px]">
-        <section className="border-b border-[var(--border)] px-10 pb-8 pt-8 lg:px-10 lg:pb-10">
-          <div className="nipux-mono text-[12px] uppercase tracking-[0.32em] text-[var(--muted-foreground)]">
-            SYSTEM_STATUS: {summary.hermes.installed && summary.settings.configured ? "OPTIMAL" : "CONFIG_REQUIRED"}
+      <div className="flex min-h-[calc(100vh-52px)] flex-col overflow-auto bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.035),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)]">
+        <section className="grid border-b border-[var(--border)] xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="px-5 py-8 md:px-8 md:py-10">
+            <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
+              SYSTEM STATUS: {summary.runtime_state.model_loaded ? "LIVE" : "READY"}
+            </div>
+            <h1 className="mt-6 max-w-[9ch] text-[clamp(56px,7vw,96px)] font-medium leading-[0.9] tracking-[-0.08em] text-[var(--foreground)]">
+              AGENT_CONTROL
+            </h1>
+            <p className="mt-6 max-w-[640px] text-[17px] leading-[1.7] text-[var(--muted-foreground)] md:text-[18px]">
+              Run long-horizon local agents through one clear control surface. Monitor
+              throughput, tokens, and live system state without fighting the interface.
+            </p>
+            {actionError ? (
+              <p className="mt-4 max-w-[720px] text-[14px] leading-[1.7] text-[#d8a499]">{actionError}</p>
+            ) : null}
           </div>
 
-          <div className="mt-5 flex flex-col gap-8 xl:flex-row xl:items-center xl:justify-between">
-            <div className="max-w-[760px]">
-              <h1 className="nipux-display text-[88px] uppercase leading-[0.86] tracking-[0.01em] sm:text-[108px] xl:text-[150px]">
-                AGENT_CONTROL
-              </h1>
-              <p className="mt-5 max-w-[700px] text-[22px] leading-[1.45] text-[var(--muted-foreground)] sm:text-[24px] xl:text-[26px]">
-                Orchestrate high-precision agentic nodes across the local monolith cluster.
-                Monitor token throughput and latency in real-time.
-              </p>
-            </div>
-
-            <div className="flex items-center xl:self-end">
-              <Button
-                variant="default"
-                className="h-[58px] min-w-[258px] border-white bg-white px-8 text-[14px] tracking-[0.22em] text-black"
-                onClick={() =>
-                  runAction("runtime", () =>
-                    summary.runtime_state.model_loaded ? unloadModel() : loadModel(),
-                  )
-                }
-                disabled={pendingTarget === "runtime"}
-              >
-                {pendingTarget === "runtime" ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : summary.runtime_state.model_loaded ? (
-                  "UNLOAD_RUNTIME"
-                ) : (
-                  "DEPLOY_NEW_NODE"
-                )}
-              </Button>
-            </div>
+          <div className="flex items-center justify-end border-t border-[var(--border)] px-5 py-5 xl:border-l xl:border-t-0 xl:px-6">
+            <button
+              type="button"
+              onClick={() => void handlePrimaryAction()}
+              disabled={actionPending}
+              className="h-[64px] w-full max-w-[208px] border border-[var(--foreground)] bg-[var(--foreground)] px-6 nipux-mono text-[13px] uppercase tracking-[0.16em] text-black transition-opacity hover:opacity-92"
+            >
+              {summary.runtime_state.model_loaded ? "STOP_RUNTIME" : actionPending ? "STARTING..." : "START_RUNTIME"}
+            </button>
           </div>
         </section>
 
-        <section className="grid border-b border-[var(--border)] xl:grid-cols-[1fr_1fr_1fr_300px]">
-          {topNodes.map((node, index) => (
+        <section className="grid xl:grid-cols-[repeat(3,minmax(0,1fr))]">
+          {heroNodes.map((node) => (
             <NodeCard
               key={node.id}
-              node={node}
-              cardLabel={`AGENT_${String(index + 1).padStart(2, "0")}`}
-              pending={pendingTarget === node.id}
-              onToggle={() =>
-                runAction(node.id, () =>
-                  node.status === "active" ? stopNode(node.id) : startNode(node.id),
-                )
-              }
+              identifier={node.identifier}
+              label={displayNodeLabel(node.label)}
+              status={node.status}
+              model={node.model}
+              latencyMs={node.latency_ms}
+              tokensPerSec={node.tokens_per_sec}
+              totalTokens={node.total_tokens}
+              trend={node.trend}
             />
           ))}
-
-          <SlotCard
-            runtimeLoaded={summary.runtime_state.model_loaded}
-            pending={pendingTarget === "runtime"}
-            onLoadToggle={() =>
-              runAction("runtime", () =>
-                summary.runtime_state.model_loaded ? unloadModel() : loadModel(),
-              )
-            }
-          />
         </section>
 
-        <section className="grid min-h-0 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-h-0 overflow-hidden border-b border-r border-[var(--border)] px-10 py-8 xl:border-b-0">
-            <div className="flex items-center justify-between">
-              <div className="nipux-mono text-[14px] uppercase tracking-[0.28em]">TERMINAL_LOG_OUTPUT</div>
-              <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-                LIVE_STREAM_V0.9.1
+        <section className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1.62fr)_340px]">
+          <div className="border-r border-t border-[var(--border)] px-5 py-6 md:px-8 md:py-7">
+            <div className="flex items-center justify-between gap-4">
+              <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--foreground)]/92">
+                TERMINAL_LOG_OUTPUT
               </div>
             </div>
 
-            <div className="mt-10 max-h-[320px] space-y-4 overflow-hidden">
-              {displayLogLines.map((line, index) => {
-                const warning = /warn|error/i.test(line);
+            <div className="mt-8 space-y-4 overflow-hidden nipux-mono text-[14px] leading-[1.8] text-[var(--foreground)]/88 md:text-[15px]">
+              {summary.log_lines.map((line, index) => {
+                const isWarn = line.includes("WARN");
+
                 return (
-                  <div
-                    key={`${line}-${index}`}
-                    className={`nipux-mono text-[13px] uppercase leading-7 tracking-[0.08em] ${
-                      warning ? "text-[#d9a28f]" : "text-[var(--foreground)]"
-                    }`}
-                  >
+                  <div key={`${line}-${index}`} className={isWarn ? "text-[#d8a499]" : undefined}>
                     {line}
                   </div>
                 );
               })}
-              <div className="nipux-mono text-[20px] uppercase">&gt; _</div>
+              <div>&gt; ■</div>
             </div>
           </div>
 
-          <aside className="min-h-0 overflow-hidden px-9 py-8">
-            <div className="nipux-mono text-[14px] uppercase tracking-[0.28em]">CLUSTER_METRICS</div>
+          <aside className="border-t border-[var(--border)] px-5 py-6 md:px-8 md:py-7">
+            <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--foreground)]/92">
+              CLUSTER_METRICS
+            </div>
 
-            <div className="mt-10 space-y-12">
-              <div>
-                <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  TOTAL THROUGHPUT
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <span className="text-[72px] leading-none">{metrics.throughput.toFixed(1)}</span>
-                  <span className="nipux-mono pb-2 text-[16px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                    TOK/S
-                  </span>
-                </div>
-                <div className="mt-4 border-b border-[var(--border)]" />
-              </div>
-
-              <div>
-                <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  NETWORK STABILITY
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <span className="text-[72px] leading-none">{metrics.network.toFixed(2)}</span>
-                  <span className="nipux-mono pb-2 text-[16px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                    %
-                  </span>
-                </div>
-                <div className="mt-4 border-b border-[var(--border)]" />
-              </div>
-
-              <div>
-                <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  COMPUTE EFFICIENCY
-                </div>
-                <div className="mt-3 flex items-end gap-3">
-                  <span className="text-[72px] leading-none">{metrics.efficiency.toFixed(2)}</span>
-                  <span className="nipux-mono pb-2 text-[16px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-                    RATIO
-                  </span>
-                </div>
-                <div className="mt-4 border-b border-[var(--border)]" />
-              </div>
+            <div className="mt-10 space-y-9">
+              <ClusterMetric label="Total Throughput" value={throughput} suffix="TOK/S" />
+              <ClusterMetric label="Total Tokens" value={totalTokens} />
+              <ClusterMetric label="Active Runs" value={activeRuns} />
             </div>
           </aside>
         </section>
-
-        <footer className="flex items-center justify-between border-t border-[var(--border)] px-8">
-          <div className="flex items-center gap-5 nipux-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            <span>■ SYSTEM_ONLINE</span>
-            <span>|</span>
-            <span>UPTIME: {formatUptime(summary.runtime_state.started_at)}</span>
-          </div>
-          <div className="flex items-center gap-5 nipux-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            <span>LOCATION: LOCAL_SECURE</span>
-            <span>V2.4.0-STABLE</span>
-          </div>
-        </footer>
       </div>
     </AppShell>
   );

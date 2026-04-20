@@ -1,335 +1,324 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+
 import { AppShell } from "./app-shell";
-import { Badge } from "@/components/ui/badge";
+import { getInstallTask, installRuntime, saveSettings, startRuntime, stopRuntime } from "@/lib/api";
+import { useLiveSummary } from "@/lib/use-live-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { getHermesSettings, getSummary, saveHermesSettings } from "@/lib/api";
-import type { HermesSettingsSummary, HermesSettingsUpdate, NipuxSummary } from "@/lib/types";
 
-function StatusLine({ label, value }: { label: string; value: string }) {
+
+function StatusRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-      <span className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
+    <div className="grid grid-cols-[120px_minmax(0,1fr)] border-b border-[var(--border)] py-3 last:border-b-0">
+      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
         {label}
-      </span>
-      <span className="ml-6 max-w-[68%] text-right nipux-mono text-[13px] uppercase tracking-[0.12em] break-all">
+      </div>
+      <div className="nipux-mono break-all text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
         {value}
-      </span>
+      </div>
     </div>
   );
 }
 
+
 export function SettingsView() {
-  const [summary, setSummary] = useState<NipuxSummary | null>(null);
-  const [settings, setSettings] = useState<HermesSettingsSummary | null>(null);
-  const [secretDrafts, setSecretDrafts] = useState({
-    openrouter_api_key: "",
-    openai_api_key: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { summary, loading, error, refresh } = useLiveSummary();
+  const [preferredRuntime, setPreferredRuntime] = useState("");
+  const [preferredModel, setPreferredModel] = useState("");
+  const [providerMode, setProviderMode] = useState("local");
+  const [endpoint, setEndpoint] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [actionBudget, setActionBudget] = useState("8");
+  const [checkpointEvery, setCheckpointEvery] = useState("3");
+  const [workspaceRoot, setWorkspaceRoot] = useState("");
+  const [pending, setPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [taskLogs, setTaskLogs] = useState<string[]>([]);
 
   useEffect(() => {
-    let mounted = true;
-    const refresh = async () => {
-      const [summaryValue, settingsValue] = await Promise.all([getSummary(), getHermesSettings()]);
-      if (!mounted) return;
-      setSummary(summaryValue);
-      setSettings(settingsValue);
-    };
-    void refresh();
+    if (!summary) return;
+    setPreferredRuntime(summary.runtime_plan.runtime.id);
+    setPreferredModel(summary.runtime_plan.recommendation.selected_model_id ?? "");
+    setProviderMode(summary.settings.provider_mode);
+    setEndpoint(summary.settings.openai_base_url);
+    setApiKey(summary.settings.openai_api_key ?? "");
+    setModelName(summary.settings.openai_model);
+    setActionBudget(String(summary.settings.worker_action_budget));
+    setCheckpointEvery(String(summary.settings.checkpoint_every_actions));
+    setWorkspaceRoot(summary.settings.workspace_root);
+  }, [summary]);
+
+  useEffect(() => {
+    if (!summary?.runtime_state.install_task_id) return;
+    let active = true;
+    const id = summary.runtime_state.install_task_id;
+    const timer = setInterval(() => {
+      void getInstallTask(id)
+        .then((task) => {
+          if (!active) return;
+          setTaskLogs(task.detail.logs ?? []);
+          if (task.status === "completed" || task.status === "failed") {
+            void refresh();
+          }
+        })
+        .catch(() => {});
+    }, 1500);
     return () => {
-      mounted = false;
+      active = false;
+      clearInterval(timer);
     };
-  }, []);
+  }, [refresh, summary?.runtime_state.install_task_id]);
 
-  const toolsetText = useMemo(() => settings?.toolsets.join(", ") ?? "", [settings]);
+  async function handleSave() {
+    setPending(true);
+    setActionError(null);
+    try {
+      await saveSettings({
+        provider_mode: providerMode,
+        openai_base_url: endpoint,
+        openai_api_key: apiKey,
+        openai_model: modelName,
+        worker_action_budget: Number(actionBudget),
+        checkpoint_every_actions: Number(checkpointEvery),
+        workspace_root: workspaceRoot,
+        preferred_runtime_id: preferredRuntime,
+        preferred_model_id: preferredModel,
+      });
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to save settings.");
+    } finally {
+      setPending(false);
+    }
+  }
 
-  if (!summary || !settings) {
+  async function handleInstall() {
+    setPending(true);
+    setActionError(null);
+    try {
+      const task = await installRuntime({
+        runtime_id: preferredRuntime,
+        model_id: preferredModel,
+      });
+      setTaskLogs(task.detail.logs ?? []);
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to launch install.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleRuntimeToggle() {
+    if (!summary) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      if (summary.runtime_state.model_loaded) {
+        await stopRuntime();
+      } else {
+        await startRuntime({
+          runtime_id: preferredRuntime,
+          model_id: preferredModel,
+        });
+      }
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to change runtime state.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (loading && !summary) {
     return (
       <AppShell>
-        <div className="px-10 py-10">
-          <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-            Loading_hermes_settings
-          </div>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          Loading settings...
         </div>
       </AppShell>
     );
   }
 
-  const updateField = <K extends keyof HermesSettingsSummary>(key: K, value: HermesSettingsSummary[K]) => {
-    setSettings((current) => (current ? { ...current, [key]: value } : current));
-  };
+  if (!summary) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
+          {error ?? "Settings are unavailable."}
+        </div>
+      </AppShell>
+    );
+  }
 
-  const save = async () => {
-    setSaving(true);
-    const payload: HermesSettingsUpdate = {
-      model: settings.model,
-      toolsets: toolsetText,
-      max_turns: settings.max_turns,
-      terminal_backend: settings.terminal_backend,
-      terminal_cwd: settings.terminal_cwd,
-      compression_enabled: settings.compression_enabled,
-      compression_threshold: settings.compression_threshold,
-      display_personality: settings.display_personality,
-      openai_base_url: settings.openai_base_url,
-      openrouter_api_key: secretDrafts.openrouter_api_key || undefined,
-      openai_api_key: secretDrafts.openai_api_key || undefined,
-    };
-    const next = await saveHermesSettings(payload);
-    setSettings(next);
-    setSecretDrafts({ openrouter_api_key: "", openai_api_key: "" });
-    setSummary(await getSummary());
-    setSaving(false);
-  };
-
-  const copyInstallCommand = async () => {
-    await navigator.clipboard.writeText(summary.hermes.install_command);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
+  const runtimeOptions = summary.runtime_plan.runtime_options ?? [];
+  const modelOptions = summary.runtime_plan.model_options ?? [];
+  const model = summary.runtime_plan.model;
 
   return (
     <AppShell telemetry={summary.telemetry}>
-      <section className="border-b border-[var(--border)] px-10 py-10">
-        <div className="nipux-mono text-[12px] uppercase tracking-[0.3em] text-[var(--muted-foreground)]">
-          Hermes_settings
-        </div>
-        <div className="mt-5 grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
-          <div>
-            <h1 className="nipux-display text-[108px] uppercase leading-[0.84]">System_Config</h1>
-            <p className="mt-4 max-w-[780px] text-[28px] leading-[1.22] text-[var(--muted-foreground)]">
-              Nipux does not own agent logic. Hermes stays separate, installs separately, and this
-              panel edits Hermes configuration directly.
-            </p>
-          </div>
+      <section className="grid min-h-[calc(100vh-52px)] xl:grid-cols-[minmax(0,1fr)_320px]">
+        <main className="border-r border-[var(--border)]">
+          <header className="border-b border-[var(--border)] px-5 py-5 md:px-8">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+              settings
+            </div>
+            <h1 className="mt-3 text-[42px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+              Runtime boundary
+            </h1>
+            {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
+          </header>
 
-          <div className="nipux-panel-soft px-6 py-6">
-            <div className="grid gap-4">
-              <StatusLine label="Hermes" value={summary.hermes.installed ? "INSTALLED" : "NOT_INSTALLED"} />
-              <StatusLine label="Configured" value={summary.hermes.configured ? "READY" : "PARTIAL"} />
-              <StatusLine label="Gateway" value={summary.hermes.gateway_running ? "ONLINE" : "CLI_MODE"} />
-              <StatusLine label="Version" value={summary.hermes.version || "UNKNOWN"} />
-            </div>
-          </div>
-        </div>
-      </section>
+          <div className="grid gap-px bg-[var(--border)] lg:grid-cols-2">
+            <section className="bg-[var(--background)] px-5 py-5 md:px-8">
+              <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+                runtime_plan
+              </div>
+              <div className="mt-4">
+                <StatusRow label="Runtime" value={summary.runtime_plan.runtime.label} />
+                <StatusRow label="Model" value={model ? `${model.family} ${model.size} ${model.quantization}` : "UNSUPPORTED"} />
+                <StatusRow label="Disk" value={`${summary.runtime_plan.install_plan.estimated_disk_needed_gb.toFixed(1)} GB`} />
+                <StatusRow label="Fit" value={summary.runtime_plan.install_plan.blocked ? "BLOCKED" : "SUPPORTED"} />
+              </div>
+            </section>
 
-      <section className="grid gap-px bg-[var(--border)] xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-        <div className="grid gap-px bg-[var(--border)]">
-          <div className="nipux-panel grid gap-5 px-8 py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-              Runtime
-            </div>
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Model
-                </Label>
-                <Input value={settings.model} onChange={(event) => updateField("model", event.target.value)} />
+            <section className="bg-[var(--background)] px-5 py-5 md:px-8">
+              <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+                provider
               </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  OpenAI Base URL
-                </Label>
-                <Input
-                  value={settings.openai_base_url}
-                  onChange={(event) => updateField("openai_base_url", event.target.value)}
-                />
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Mode
+                  </label>
+                  <select
+                    value={providerMode}
+                    onChange={(event) => setProviderMode(event.target.value)}
+                    className="border border-[var(--border)] bg-transparent px-3 py-2 text-[14px] text-[var(--foreground)] outline-none"
+                  >
+                    <option value="local" className="bg-[var(--background)]">
+                      Local runtime
+                    </option>
+                    <option value="external" className="bg-[var(--background)]">
+                      External endpoint
+                    </option>
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Endpoint
+                  </label>
+                  <Input value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="http://127.0.0.1:8000/v1" />
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    API key
+                  </label>
+                  <Input value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="Optional for local runtimes" />
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Model name
+                  </label>
+                  <Input value={modelName} onChange={(event) => setModelName(event.target.value)} placeholder="qwen/qwen3.5-32b or local alias" />
+                </div>
               </div>
-            </div>
-          </div>
+            </section>
 
-          <div className="nipux-panel grid gap-5 px-8 py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-              Execution
-            </div>
-            <div className="grid gap-5 md:grid-cols-3">
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Toolsets
-                </Label>
-                <Input
-                  value={toolsetText}
-                  onChange={(event) =>
-                    updateField(
-                      "toolsets",
-                      event.target.value.split(",").map((item) => item.trim()).filter(Boolean),
-                    )
-                  }
-                />
+            <section className="bg-[var(--background)] px-5 py-5 md:px-8">
+              <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+                runtime_selection
               </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Terminal backend
-                </Label>
-                <Input
-                  value={settings.terminal_backend}
-                  onChange={(event) => updateField("terminal_backend", event.target.value)}
-                />
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Preferred runtime
+                  </label>
+                  <select
+                    value={preferredRuntime}
+                    onChange={(event) => setPreferredRuntime(event.target.value)}
+                    className="border border-[var(--border)] bg-transparent px-3 py-2 text-[14px] text-[var(--foreground)] outline-none"
+                  >
+                    {runtimeOptions.map((item) => (
+                      <option key={item.id} value={item.id} className="bg-[var(--background)]">
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Preferred model
+                  </label>
+                  <select
+                    value={preferredModel}
+                    onChange={(event) => setPreferredModel(event.target.value)}
+                    className="border border-[var(--border)] bg-transparent px-3 py-2 text-[14px] text-[var(--foreground)] outline-none"
+                  >
+                    {modelOptions.map((item) => (
+                      <option key={item.id} value={item.id} className="bg-[var(--background)]">
+                        {item.family} {item.size} {item.quantization}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Working directory
-                </Label>
-                <Input
-                  value={settings.terminal_cwd}
-                  onChange={(event) => updateField("terminal_cwd", event.target.value)}
-                />
-              </div>
-            </div>
-          </div>
+            </section>
 
-          <div className="nipux-panel grid gap-5 px-8 py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-              Behavior
-            </div>
-            <div className="grid gap-5 md:grid-cols-4">
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Max turns
-                </Label>
-                <Input
-                  type="number"
-                  value={settings.max_turns}
-                  onChange={(event) => updateField("max_turns", Number(event.target.value))}
-                />
+            <section className="bg-[var(--background)] px-5 py-5 md:px-8">
+              <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+                harness_defaults
               </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Compression
-                </Label>
-                <Input
-                  value={settings.compression_enabled ? "enabled" : "disabled"}
-                  onChange={(event) =>
-                    updateField("compression_enabled", event.target.value.trim().toLowerCase() !== "disabled")
-                  }
-                />
+              <div className="mt-4 grid gap-4">
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Action budget
+                  </label>
+                  <Input value={actionBudget} onChange={(event) => setActionBudget(event.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Checkpoint cadence
+                  </label>
+                  <Input value={checkpointEvery} onChange={(event) => setCheckpointEvery(event.target.value)} />
+                </div>
+                <div className="grid gap-2">
+                  <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    Workspace root
+                  </label>
+                  <Input value={workspaceRoot} onChange={(event) => setWorkspaceRoot(event.target.value)} />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Threshold
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={settings.compression_threshold}
-                  onChange={(event) => updateField("compression_threshold", Number(event.target.value))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Personality
-                </Label>
-                <Input
-                  value={settings.display_personality}
-                  onChange={(event) => updateField("display_personality", event.target.value)}
-                />
-              </div>
-            </div>
+            </section>
           </div>
+        </main>
 
-          <div className="nipux-panel flex items-center justify-between px-8 py-6">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-              Writes directly to Hermes config.yaml and .env
+        <aside className="grid">
+          <div className="border-b border-[var(--border)] px-5 py-5">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+              actions
             </div>
-            <Button onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save_to_hermes"}
-            </Button>
-          </div>
-        </div>
-
-        <aside className="grid gap-px bg-[var(--border)]">
-          <div className="nipux-panel px-8 py-7">
-            <div className="flex items-center justify-between">
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-                Hermes_install
-              </div>
-              <Badge variant={summary.hermes.installed ? "secondary" : "default"}>
-                {summary.hermes.installed ? "READY" : "REQUIRED"}
-              </Badge>
-            </div>
-            <div className="mt-5 nipux-mono text-[13px] uppercase leading-7 text-[var(--muted-foreground)]">
-              Nipux keeps Hermes separate. If Hermes is missing, install it first and then return
-              here to configure the runtime.
-            </div>
-            <div className="mt-5 border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <div className="nipux-mono text-[12px] leading-7">{summary.hermes.install_command}</div>
-            </div>
-            <div className="mt-5">
-              <Button variant="outline" onClick={copyInstallCommand}>
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copied" : "Copy_install"}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => void handleSave()} disabled={pending}>
+                Save
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void handleInstall()} disabled={pending}>
+                Install plan
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void handleRuntimeToggle()} disabled={pending}>
+                {summary.runtime_state.model_loaded ? "Stop runtime" : "Start runtime"}
               </Button>
             </div>
           </div>
 
-          <div className="nipux-panel px-8 py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-              Paths
+          <div className="px-5 py-5">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+              task_log
             </div>
-            <div className="mt-5 grid gap-4">
-              <StatusLine label="Binary" value={summary.hermes.binary || "NOT_FOUND"} />
-              <StatusLine label="Home" value={summary.hermes.home} />
-              <StatusLine label="Config" value={summary.hermes.config_path} />
-              <StatusLine label="Env" value={summary.hermes.env_path} />
-            </div>
-          </div>
-
-          <div className="nipux-panel px-8 py-7">
-            <div className="nipux-mono text-[12px] uppercase tracking-[0.24em] text-[var(--muted-foreground)]">
-              Secrets
-            </div>
-            <div className="mt-5 grid gap-4">
-              <StatusLine
-                label="OpenRouter"
-                value={settings.openrouter_api_key_set ? settings.openrouter_api_key_hint : "NOT_SET"}
-              />
-              <StatusLine
-                label="OpenAI"
-                value={settings.openai_api_key_set ? settings.openai_api_key_hint : "NOT_SET"}
-              />
-            </div>
-            <div className="mt-5 grid gap-4">
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Update OpenRouter key
-                </Label>
-                <Input
-                  type="password"
-                  value={secretDrafts.openrouter_api_key}
-                  placeholder="leave blank to keep current"
-                  onChange={(event) =>
-                    setSecretDrafts((current) => ({
-                      ...current,
-                      openrouter_api_key: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Update OpenAI key
-                </Label>
-                <Input
-                  type="password"
-                  value={secretDrafts.openai_api_key}
-                  placeholder="leave blank to keep current"
-                  onChange={(event) =>
-                    setSecretDrafts((current) => ({
-                      ...current,
-                      openai_api_key: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-            <div className="mt-5 nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-              Keys stay in Hermes .env. Nipux only shows masked state here.
+            <div className="mt-4 space-y-3 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/84">
+              {taskLogs.length ? taskLogs.slice(-12).map((line, index) => <div key={`${line}-${index}`}>{line}</div>) : <div>No active install task.</div>}
             </div>
           </div>
         </aside>

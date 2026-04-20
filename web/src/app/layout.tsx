@@ -16,7 +16,7 @@ const monoFace = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Nipux",
-  description: "Hermes-backed local agent operating surface.",
+  description: "Long-horizon local agent operating surface.",
 };
 
 export default function RootLayout({

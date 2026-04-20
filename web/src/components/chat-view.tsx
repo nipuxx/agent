@@ -1,193 +1,309 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+
 import { AppShell } from "./app-shell";
+import { BrowserPane } from "./browser-pane";
+import { createThread, getRun, getThreads, sendThreadMessage } from "@/lib/api";
+import { useLiveSummary } from "@/lib/use-live-summary";
+import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getSummary, startNode, stopNode } from "@/lib/api";
-import type { NipuxSummary } from "@/lib/types";
+import { Input } from "@/components/ui/input";
 
-function formatCount(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+
+function SessionLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center border-b border-[var(--border)] py-3 last:border-b-0">
+      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        {label}
+      </div>
+      <div className="nipux-mono break-all text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
+        {value}
+      </div>
+    </div>
+  );
 }
 
+
+function MessageBlock({
+  label,
+  body,
+  kind,
+}: {
+  label: string;
+  body: string;
+  kind: string;
+}) {
+  return (
+    <div className={kind === "tool" ? "border border-[var(--border)] bg-white/[0.018] px-4 py-4" : "max-w-[880px]"}>
+      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        {label}
+      </div>
+      <div
+        className={
+          kind === "tool"
+            ? "mt-2 whitespace-pre-wrap nipux-mono text-[12px] tracking-[0.04em] text-[var(--foreground)]/78"
+            : "mt-3 whitespace-pre-wrap text-[17px] leading-[1.75] text-[var(--foreground)]/92"
+        }
+      >
+        {body}
+      </div>
+    </div>
+  );
+}
+
+
 export function ChatView() {
-  const [summary, setSummary] = useState<NipuxSummary | null>(null);
+  const { summary, loading, error, refresh } = useLiveSummary();
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string; status: string }>>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [runDetail, setRunDetail] = useState<{ status: string; taskCount: number } | null>(null);
+
+  const agents = useMemo(() => summary?.agents ?? [], [summary?.agents]);
+  const runs = useMemo(() => summary?.runs ?? [], [summary?.runs]);
 
   useEffect(() => {
-    let mounted = true;
-    const refresh = async () => {
-      const next = await getSummary();
-      if (mounted) setSummary(next);
-    };
+    if (!selectedAgentId && agents[0]) {
+      setSelectedAgentId(agents[0].id);
+    }
+  }, [agents, selectedAgentId]);
 
-    void refresh();
-    const timer = window.setInterval(refresh, 5000);
+  useEffect(() => {
+    if (!selectedAgentId) {
+      setThreads([]);
+      setSelectedThreadId(null);
+      return;
+    }
+    let active = true;
+    getThreads(selectedAgentId)
+      .then((rows) => {
+        if (!active) return;
+        setThreads(rows);
+        if (!selectedThreadId && rows[0]) {
+          setSelectedThreadId(rows[0].id);
+        }
+      })
+      .catch((err) => {
+        if (!active) return;
+        setActionError(err instanceof Error ? err.message : "Failed to load threads.");
+      });
     return () => {
-      mounted = false;
-      window.clearInterval(timer);
+      active = false;
     };
-  }, []);
+  }, [selectedAgentId, selectedThreadId]);
 
-  const activeNode = useMemo(() => {
-    if (!summary) return null;
-    return summary.nodes.find((node) => node.status === "active") ?? summary.nodes[0] ?? null;
-  }, [summary]);
+  const { bundle } = useThreadBundle(selectedThreadId);
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0] ?? null,
+    [agents, selectedAgentId],
+  );
+  const activeRun = useMemo(
+    () => runs.find((run) => run.thread_id === selectedThreadId && ["queued", "planning", "running", "paused"].includes(run.status)) ?? null,
+    [runs, selectedThreadId],
+  );
 
-  if (!summary || !activeNode) {
+  useEffect(() => {
+    if (!activeRun?.id) {
+      setRunDetail(null);
+      return;
+    }
+    let active = true;
+    getRun(activeRun.id)
+      .then((run) => {
+        if (!active) return;
+        setRunDetail({ status: run.status, taskCount: run.tasks.length });
+      })
+      .catch(() => {
+        if (!active) return;
+        setRunDetail(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeRun?.id, bundle?.messages.length]);
+
+  async function handleNewThread() {
+    if (!selectedAgentId) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      const thread = await createThread({ agent_id: selectedAgentId });
+      const nextThreads = await getThreads(selectedAgentId);
+      setThreads(nextThreads);
+      setSelectedThreadId(thread.id);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to create thread.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleSend() {
+    if (!selectedThreadId || !message.trim()) return;
+    setPending(true);
+    setActionError(null);
+    const body = message.trim();
+    setMessage("");
+    try {
+      await sendThreadMessage(selectedThreadId, body);
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to send message.");
+      setMessage(body);
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (loading && !summary) {
     return (
       <AppShell>
-        <div className="px-10 py-10">
-          <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-            Synchronizing_focus_surface
-          </div>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+          Loading console...
         </div>
       </AppShell>
     );
   }
 
-  const toggleActiveNode = async () => {
-    setPending(true);
-    const next =
-      activeNode.status === "active"
-        ? await stopNode(activeNode.id)
-        : await startNode(activeNode.id);
-    setSummary(next);
-    setPending(false);
-  };
+  if (!summary) {
+    return (
+      <AppShell>
+        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
+          {error ?? "Console is unavailable."}
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell telemetry={summary.telemetry}>
-      <section className="grid min-h-[calc(100vh-72px)] xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.85fr)]">
-        <div className="relative border-b border-r border-[var(--border)] xl:border-b-0">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.06),transparent_18%),radial-gradient(circle_at_80%_12%,rgba(255,255,255,0.04),transparent_18%),radial-gradient(circle_at_76%_84%,rgba(255,255,255,0.04),transparent_16%)]" />
-          <div className="absolute inset-0 opacity-30">
-            <div className="absolute left-[7%] top-[8%] h-[62%] w-[76%] border border-[var(--border)]" />
-            <div className="absolute left-[7%] top-[32%] h-[50%] w-[44%] border border-[var(--border)]" />
-            <div className="absolute left-[51%] top-[58%] h-[24%] w-[32%] border border-[var(--border)]" />
-          </div>
-
-          <div className="relative flex h-full flex-col px-10 py-8">
-            <div className="flex items-center justify-between">
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-                Visual_core_01
-              </div>
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                TPS: {activeNode.tokens_per_sec.toFixed(1)} {"//"} Latency: {activeNode.latency_ms.toFixed(0)}MS
-              </div>
+      <section className="grid min-h-[calc(100vh-52px)] xl:grid-cols-[260px_minmax(0,1fr)_340px]">
+        <aside className="border-r border-[var(--border)]">
+          <div className="border-b border-[var(--border)] px-5 py-5">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+              agent_console
             </div>
-
-            <div className="mt-12 max-w-[360px] border-l border-[var(--border)] pl-6">
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.22em]">Focus_surface</div>
-              <div className="mt-3 nipux-mono text-[18px] uppercase leading-8 text-[var(--muted-foreground)]">
-                Node: {activeNode.identifier}
-                <br />
-                Model: {activeNode.model}
-                <br />
-                State: {activeNode.status}
-                <br />
-                Tokens: {formatCount(activeNode.total_tokens)}
-              </div>
+            <div className="mt-4 flex gap-2">
+              <select
+                value={selectedAgentId ?? ""}
+                onChange={(event) => setSelectedAgentId(event.target.value)}
+                className="w-full border border-[var(--border)] bg-transparent px-3 py-2 text-[14px] text-[var(--foreground)] outline-none"
+              >
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id} className="bg-[var(--background)]">
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
             </div>
-
-            <div className="pointer-events-none relative mt-20 flex-1">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="nipux-display text-[180px] uppercase leading-none tracking-[0.04em] text-white/[0.06]">
-                  Focus
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)] md:grid-cols-4">
-              <div className="bg-[var(--surface)] px-5 py-4">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Model
-                </div>
-                <div className="mt-2 nipux-mono text-[13px] uppercase tracking-[0.12em]">{activeNode.model}</div>
-              </div>
-              <div className="bg-[var(--surface)] px-5 py-4">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Tokens/sec
-                </div>
-                <div className="mt-2 nipux-mono text-[13px] uppercase tracking-[0.12em]">
-                  {activeNode.tokens_per_sec.toFixed(1)}
-                </div>
-              </div>
-              <div className="bg-[var(--surface)] px-5 py-4">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Latency
-                </div>
-                <div className="mt-2 nipux-mono text-[13px] uppercase tracking-[0.12em]">
-                  {activeNode.latency_ms.toFixed(0)}MS
-                </div>
-              </div>
-              <div className="bg-[var(--surface)] px-5 py-4">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Connection
-                </div>
-                <div className="mt-2 nipux-mono text-[13px] uppercase tracking-[0.12em]">
-                  {summary.runtime_state.endpoint ? "LOCAL_SECURE" : "UNBOUND"}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <aside className="flex min-h-[calc(100vh-72px)] flex-col">
-          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-8 py-6">
-            <div className="flex items-center gap-3">
-              <div className="flex gap-2">
-                <span className="h-3 w-3 border border-[var(--border)] bg-white/20" />
-                <span className="h-3 w-3 border border-[var(--border)] bg-white/12" />
-                <span className="h-3 w-3 border border-[var(--border)] bg-white/8" />
-              </div>
-              <div className="nipux-mono text-[12px] uppercase tracking-[0.28em] text-[var(--muted-foreground)]">
-                Runtime_log_v.2.0.4
-              </div>
-            </div>
-            <Badge variant={summary.hermes.installed ? "secondary" : "default"}>
-              {summary.hermes.installed ? "Hermes_online" : "Install_hermes"}
-            </Badge>
-          </div>
-
-          <div className="flex-1 overflow-auto bg-[var(--surface-2)] px-8 py-8">
-            <div className="space-y-5">
-              {summary.log_lines.map((line, index) => (
-                <div key={`${line}-${index}`} className="grid grid-cols-[96px_minmax(0,1fr)] gap-4">
-                  <div className="nipux-mono text-[12px] uppercase tracking-[0.16em] text-white/28">
-                    [{String(index + 1).padStart(2, "0")}]
-                  </div>
-                  <div className="nipux-mono text-[16px] leading-8 text-[var(--foreground)]">{line}</div>
-                </div>
-              ))}
-              <div className="nipux-mono text-[22px] text-[var(--foreground)]">&gt; _</div>
-            </div>
-          </div>
-
-          <div className="grid gap-px border-t border-[var(--border)] bg-[var(--border)]">
-            <div className="grid gap-px bg-[var(--border)] md:grid-cols-2">
-              <div className="bg-[var(--surface)] px-8 py-5">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Prompt_tokens
-                </div>
-                <div className="mt-2 text-[34px] leading-none">{formatCount(summary.usage_summary.prompt_tokens)}</div>
-              </div>
-              <div className="bg-[var(--surface)] px-8 py-5">
-                <div className="nipux-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  Completion_tokens
-                </div>
-                <div className="mt-2 text-[34px] leading-none">{formatCount(summary.usage_summary.completion_tokens)}</div>
-              </div>
-            </div>
-            <div className="flex items-center justify-between bg-[var(--surface)] px-8 py-5">
-              <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                {summary.runtime_state.active_model_id || summary.settings.model || "UNASSIGNED"}
-              </div>
-              <Button variant={activeNode.status === "active" ? "outline" : "default"} size="sm" onClick={toggleActiveNode} disabled={pending}>
-                {pending ? "SYNCING" : activeNode.status === "active" ? "Stop_node" : "Start_node"}
+            <div className="mt-4">
+              <Button size="sm" onClick={() => void handleNewThread()} disabled={pending || !selectedAgentId}>
+                New thread
               </Button>
             </div>
+          </div>
+
+          <div className="px-3 py-3">
+            {threads.map((thread) => {
+              const active = thread.id === selectedThreadId;
+              return (
+                <button
+                  key={thread.id}
+                  type="button"
+                  onClick={() => setSelectedThreadId(thread.id)}
+                  className={`flex w-full items-center justify-between border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
+                    active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                  }`}
+                >
+                  <div>
+                    <div className="text-[15px] text-[var(--foreground)]">{thread.title}</div>
+                    <div className="mt-2 nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                      {thread.status}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        <div className="flex min-h-0 flex-col border-r border-[var(--border)]">
+          <header className="border-b border-[var(--border)] px-5 py-5 md:px-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
+                  session_console
+                </div>
+                <h1 className="mt-3 text-[42px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                  {bundle?.thread.title ?? "No thread selected"}
+                </h1>
+              </div>
+              <div className="flex gap-2">
+                <Badge variant={selectedAgent?.status === "running" ? "success" : "secondary"}>
+                  {selectedAgent?.status === "running" ? "Agent live" : "Agent idle"}
+                </Badge>
+                {activeRun ? <Badge variant="secondary">{activeRun.status}</Badge> : null}
+              </div>
+            </div>
+            {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
+          </header>
+
+          <div className="flex-1 overflow-auto px-5 py-6 md:px-8 md:py-8">
+            <div className="space-y-8">
+              {bundle?.messages.map((item) => (
+                <MessageBlock key={item.id} label={item.label} body={item.body} kind={item.kind} />
+              )) ?? null}
+            </div>
+          </div>
+
+          <footer className="border-t border-[var(--border)] px-5 py-5 md:px-8">
+            <div className="grid gap-4">
+              <Input
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="Assign work to the selected agent..."
+                disabled={!selectedThreadId || pending}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                {(selectedAgent?.toolsets ?? []).map((tool) => (
+                  <Badge key={tool} variant="secondary">
+                    {tool}
+                  </Badge>
+                ))}
+                <div className="ml-auto">
+                  <Button size="sm" onClick={() => void handleSend()} disabled={!selectedThreadId || pending || !message.trim()}>
+                    Send
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </footer>
+        </div>
+
+        <aside className="grid grid-rows-[auto_minmax(0,1fr)]">
+          <div className="border-b border-[var(--border)] px-5 py-5">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
+              session_state
+            </div>
+            <div className="mt-4">
+              <SessionLine label="Agent" value={selectedAgent?.name ?? "UNBOUND"} />
+              <SessionLine label="Run" value={activeRun?.status?.toUpperCase() ?? "IDLE"} />
+              <SessionLine label="Tasks" value={String(runDetail?.taskCount ?? 0)} />
+              <SessionLine label="Runtime" value={summary.runtime_state.runtime_id?.toUpperCase() ?? "AUTO"} />
+              <SessionLine
+                label="Endpoint"
+                value={summary.runtime_state.endpoint ?? summary.settings.openai_base_url ?? "UNBOUND"}
+              />
+            </div>
+          </div>
+
+          <div className="min-h-0">
+            <BrowserPane agentId={selectedAgent?.id} title="browser" />
           </div>
         </aside>
       </section>
