@@ -20,7 +20,26 @@ scripts/               Install and development entrypoints
 web/                   Browser UI
 ```
 
-## Quick Start
+## One Command
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/nipuxx/agent/main/scripts/bootstrap.sh)
+```
+
+That will:
+
+- clone or update Nipux into `~/nipux`
+- install Python and web dependencies
+- start Nipux on the current machine
+- expose the UI on `http://<server-ip>:3000`
+
+Override defaults if needed:
+
+```bash
+NIPUX_DIR=/opt/nipux NIPUX_REPO_REF=main NIPUX_START=1 bash <(curl -fsSL https://raw.githubusercontent.com/nipuxx/agent/main/scripts/bootstrap.sh)
+```
+
+## Manual Start
 
 ```bash
 git clone https://github.com/nipuxx/agent.git
