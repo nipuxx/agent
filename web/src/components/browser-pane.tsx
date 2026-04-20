@@ -71,12 +71,12 @@ export function BrowserPane({
   }
 
   return (
-    <div className="grid min-h-[420px] grid-rows-[auto_auto_minmax(0,1fr)] border border-[var(--border)]">
+    <div className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border border-[var(--border)]">
       <div className="border-b border-[var(--border)] px-4 py-4">
         <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
           {title}
         </div>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_68px] gap-2">
           <Input
             value={url}
             onChange={(event) => setUrl(event.target.value)}
@@ -89,7 +89,7 @@ export function BrowserPane({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+      <div className="grid grid-cols-2 gap-2 border-b border-[var(--border)] px-4 py-3">
         <Button variant="outline" size="sm" onClick={() => void act({ action: "back" })} disabled={!session || pending}>
           Back
         </Button>
@@ -101,35 +101,29 @@ export function BrowserPane({
           size="sm"
           onClick={() => void act({ action: session?.control_mode === "manual" ? "resume" : "pause" })}
           disabled={!session || pending}
+          className="col-span-2"
         >
           {session?.control_mode === "manual" ? "Resume agent" : "Take control"}
         </Button>
       </div>
 
-      <div className="grid min-h-0 md:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-h-[280px] bg-black/20">
-          {frameSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={frameSrc} alt="Agent browser" className="h-full w-full object-contain" />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[14px] text-[var(--muted-foreground)]">
-              Browser frame unavailable.
-            </div>
-          )}
-        </div>
+      <div className="min-h-[220px] bg-black/20">
+        {frameSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={frameSrc} alt="Agent browser" className="h-full w-full object-contain" />
+        ) : (
+          <div className="flex h-full items-center justify-center text-[14px] text-[var(--muted-foreground)]">
+            Browser frame unavailable.
+          </div>
+        )}
+      </div>
 
-        <div className="border-l border-[var(--border)] px-4 py-4">
-          <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            live_state
-          </div>
-          <div className="mt-4 space-y-3 text-[14px] text-[var(--foreground)]/88">
-            <div>{session?.title || "Untitled page"}</div>
-            <div className="nipux-mono break-all text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-              {session?.current_url || "NO_URL"}
-            </div>
-            {error ? <div className="text-[#d8a499]">{error}</div> : null}
-          </div>
+      <div className="border-t border-[var(--border)] px-4 py-3">
+        <div className="text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
+        <div className="mt-2 nipux-mono break-all text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+          {session?.current_url || "NO_URL"}
         </div>
+        {error ? <div className="mt-2 text-[13px] text-[#d8a499]">{error}</div> : null}
       </div>
     </div>
   );

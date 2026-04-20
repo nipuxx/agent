@@ -12,54 +12,21 @@ NIPUX_HOME = Path.home() / ".local" / "share" / "nipux"
 DB_PATH = NIPUX_HOME / "nipux.db"
 LEGACY_STATE_PATH = NIPUX_HOME / "state.json"
 
-DEFAULT_AGENT_ROWS = [
-    {
-        "id": "browser",
-        "name": "Browser Agent",
-        "description": "Web research, browsing, and evidence collection for long-running Nipux runs.",
-        "system_prompt": "Use browser-first workflows, gather evidence, and verify sources before accepting progress.",
-        "toolsets": ["browser", "file", "clarify"],
-        "model_policy": {"mode": "auto"},
-        "runtime_policy": {"mode": "auto"},
-        "hermes_overrides": {"max_turns": 100, "compression_threshold": 0.85},
-    },
-    {
-        "id": "code",
-        "name": "Code Agent",
-        "description": "Repository work, patching, and file-heavy tasks inside the Nipux workspace.",
-        "system_prompt": "Be direct, patch safely, and verify code paths before accepting a checkpoint.",
-        "toolsets": ["terminal", "file", "clarify"],
-        "model_policy": {"mode": "auto"},
-        "runtime_policy": {"mode": "auto"},
-        "hermes_overrides": {"max_turns": 100, "compression_threshold": 0.85},
-    },
-    {
-        "id": "terminal",
-        "name": "Terminal Agent",
-        "description": "Command execution, environment bring-up, and local system inspection.",
-        "system_prompt": "Prefer direct shell inspection, durable logs, and concise operational output.",
-        "toolsets": ["terminal", "file", "clarify"],
-        "model_policy": {"mode": "auto"},
-        "runtime_policy": {"mode": "auto"},
-        "hermes_overrides": {"max_turns": 100, "compression_threshold": 0.85},
-    },
-    {
-        "id": "orchestrator",
-        "name": "Orchestrator",
-        "description": "Top-level supervisor that coordinates browser, code, and terminal work.",
-        "system_prompt": "Plan deliberately, checkpoint often, verify progress, and avoid duplicate effort.",
-        "toolsets": ["browser", "terminal", "file", "clarify"],
-        "model_policy": {"mode": "auto"},
-        "runtime_policy": {"mode": "auto"},
-        "hermes_overrides": {"max_turns": 120, "compression_threshold": 0.9},
-    },
-]
+LEGACY_DEMO_AGENT_IDS = ("browser", "code", "terminal", "orchestrator")
 
 DEFAULT_APP_SETTINGS = {
     "provider_mode": "local",
     "openai_base_url": "",
     "openai_api_key": "",
     "openai_model": "",
+    "preferred_runtime_id": "",
+    "preferred_model_id": "",
+    "custom_model_enabled": False,
+    "custom_model_name": "",
+    "custom_model_repo": "",
+    "custom_model_filename": "",
+    "custom_model_runtime": "llama.cpp",
+    "custom_model_size_gb": 0.0,
     "worker_action_budget": 8,
     "checkpoint_every_actions": 3,
     "max_runtime_minutes": 120,
@@ -332,48 +299,7 @@ def _bootstrap(conn: sqlite3.Connection) -> None:
         """
     )
 
-    agent_count = conn.execute("SELECT COUNT(*) AS count FROM agents").fetchone()["count"]
-    if not agent_count:
-        for row in DEFAULT_AGENT_ROWS:
-            conn.execute(
-                """
-                INSERT INTO agents(
-                  id, name, description, system_prompt, toolsets_json, model_policy_json,
-                  runtime_policy_json, hermes_overrides_json, created_at, updated_at,
-                  last_session_id, status
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'stopped')
-                """,
-                (
-                    row["id"],
-                    row["name"],
-                    row["description"],
-                    row["system_prompt"],
-                    _json_dumps(row["toolsets"]),
-                    _json_dumps(row["model_policy"]),
-                    _json_dumps(row["runtime_policy"]),
-                    _json_dumps(row["hermes_overrides"]),
-                    now,
-                    now,
-                ),
-            )
-    else:
-        for row in DEFAULT_AGENT_ROWS:
-            conn.execute(
-                """
-                UPDATE agents
-                SET name = ?, description = ?, system_prompt = ?, toolsets_json = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    row["name"],
-                    row["description"],
-                    row["system_prompt"],
-                    _json_dumps(row["toolsets"]),
-                    now,
-                    row["id"],
-                ),
-            )
+    _purge_legacy_demo_state(conn)
 
     imported = conn.execute(
         "SELECT value FROM metadata WHERE key = 'legacy_state_imported'"
@@ -383,6 +309,35 @@ def _bootstrap(conn: sqlite3.Connection) -> None:
         conn.execute(
             "INSERT OR REPLACE INTO metadata(key, value) VALUES ('legacy_state_imported', '1')"
         )
+
+
+def _purge_legacy_demo_state(conn: sqlite3.Connection) -> None:
+    placeholders = ", ".join("?" for _ in LEGACY_DEMO_AGENT_IDS)
+    conn.execute(f"DELETE FROM agents WHERE id IN ({placeholders})", LEGACY_DEMO_AGENT_IDS)
+
+    cleaned = conn.execute(
+        "SELECT value FROM metadata WHERE key = 'bootstrap_cleaned_v2'"
+    ).fetchone()
+    if cleaned is not None:
+        return
+
+    for table in (
+        "browser_sessions",
+        "artifacts",
+        "checkpoints",
+        "task_nodes",
+        "runs",
+        "messages",
+        "sessions",
+        "threads",
+        "events",
+        "agents",
+    ):
+        conn.execute(f"DELETE FROM {table}")
+    conn.execute("DELETE FROM install_tasks")
+    conn.execute(
+        "INSERT OR REPLACE INTO metadata(key, value) VALUES ('bootstrap_cleaned_v2', '1')"
+    )
 
 
 def _import_legacy_state(conn: sqlite3.Connection) -> None:

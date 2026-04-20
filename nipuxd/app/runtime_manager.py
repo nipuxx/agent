@@ -10,11 +10,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .catalog import MODEL_CATALOG, RUNTIME_PROFILES
 from .db import (
     NIPUX_HOME,
     create_install_task,
+    get_app_settings,
     get_install_task,
     get_metadata,
     get_runtime_state,
@@ -183,6 +185,73 @@ def _model_home(model_id: str) -> Path:
     return MODELS_ROOT / model_id
 
 
+def _normalize_repo_id(value: str) -> str:
+    return value.replace("https://huggingface.co/", "").strip("/")
+
+
+def _parse_huggingface_reference(value: str) -> tuple[str, str]:
+    raw = str(value or "").strip()
+    if not raw:
+        return "", ""
+
+    if raw.startswith("https://huggingface.co/"):
+        parsed = urlparse(raw)
+        path = parsed.path.strip("/")
+        parts = path.split("/")
+        if len(parts) >= 2:
+            repo = "/".join(parts[:2])
+            if len(parts) >= 5 and parts[2] in {"blob", "resolve"}:
+                return repo, "/".join(parts[4:])
+            return repo, ""
+
+    return _normalize_repo_id(raw), ""
+
+
+def _custom_model_from_settings(
+    settings: dict[str, Any],
+    *,
+    runtime_id: str | None = None,
+) -> dict[str, Any] | None:
+    if not settings.get("custom_model_enabled"):
+        return None
+    repo_input = str(settings.get("custom_model_repo") or "").strip()
+    repo, filename_from_link = _parse_huggingface_reference(repo_input)
+    if not repo:
+        return None
+
+    effective_runtime = str(
+        runtime_id
+        or settings.get("custom_model_runtime")
+        or settings.get("preferred_runtime_id")
+        or "llama.cpp"
+    ).strip()
+    filename = str(settings.get("custom_model_filename") or "").strip() or filename_from_link
+    label = str(settings.get("custom_model_name") or "").strip() or _normalize_repo_id(repo).split("/")[-1]
+    size_hint = float(settings.get("custom_model_size_gb") or 0.0)
+    quant = filename or ("MLX snapshot" if effective_runtime == "mlx" else "Custom")
+    artifact_kind = "mlx" if effective_runtime == "mlx" else "gguf"
+    return {
+        "id": "custom",
+        "family": label,
+        "size": "Custom",
+        "quantization": quant,
+        "runtime": effective_runtime,
+        "artifact_kind": artifact_kind,
+        "min_vram_gb": 0.0,
+        "target_vram_gb": size_hint or 0.0,
+        "target_ram_gb": max(size_hint, 8.0) if size_hint else 8.0,
+        "repo": repo,
+        "filename": filename,
+        "notes": "User-supplied Hugging Face model.",
+    }
+
+
+def _resolve_model_record(model_id: str | None) -> dict[str, Any] | None:
+    if model_id == "custom":
+        return _custom_model_from_settings(get_app_settings())
+    return _find_model(model_id)
+
+
 def _endpoint_for(runtime_id: str) -> str:
     return f"http://127.0.0.1:{DEFAULT_PORTS.get(runtime_id, 8000)}/v1"
 
@@ -209,10 +278,11 @@ def _request_json(url: str, timeout: int = 3) -> dict[str, Any] | None:
 
 def get_runtime_plan() -> dict[str, Any]:
     system = detect_system()
-    preferred_model_id = get_metadata("preferred_model_id")
-    preferred_runtime_id = get_metadata("preferred_runtime_id")
+    settings = get_app_settings()
+    preferred_model_id = str(settings.get("preferred_model_id") or get_metadata("preferred_model_id") or "")
+    preferred_runtime_id = str(settings.get("preferred_runtime_id") or get_metadata("preferred_runtime_id") or "")
 
-    selected_model = _find_model(preferred_model_id)
+    selected_model = _resolve_model_record(preferred_model_id or None)
     recommendation = choose_model(system)
     if selected_model is not None:
         recommendation = {
@@ -230,10 +300,16 @@ def get_runtime_plan() -> dict[str, Any]:
             "platform_track": recommendation.get("platform_track"),
         }
 
-    runtime = choose_runtime(system, selected_model or recommendation.get("selected"))
+    active_model = selected_model or recommendation.get("selected")
+    runtime = choose_runtime(system, active_model)
     if preferred_runtime_id:
         runtime_row = _find_runtime(preferred_runtime_id)
-        if runtime_row:
+        runtime_is_compatible = (
+            active_model is None
+            or preferred_model_id == "custom"
+            or preferred_runtime_id == active_model["runtime"]
+        )
+        if runtime_row and runtime_is_compatible:
             runtime = {
                 "id": runtime_row["id"],
                 "label": runtime_row["label"],
@@ -244,6 +320,26 @@ def get_runtime_plan() -> dict[str, Any]:
     adapter = ADAPTERS[runtime["id"]]
     capability = adapter.detect_capability(system)
 
+    custom_model = _custom_model_from_settings(settings, runtime_id=runtime["id"])
+    model_options = list(MODEL_CATALOG)
+    model_options.append(
+        custom_model
+        or {
+            "id": "custom",
+            "family": "Custom",
+            "size": "Model",
+            "quantization": "User supplied",
+            "runtime": runtime["id"],
+            "artifact_kind": "custom",
+            "min_vram_gb": 0.0,
+            "target_vram_gb": 0.0,
+            "target_ram_gb": 0.0,
+            "repo": "",
+            "filename": "",
+            "notes": "Install any Hugging Face model by repo and filename.",
+        }
+    )
+
     return {
         "system": system,
         "recommendation": recommendation,
@@ -251,7 +347,7 @@ def get_runtime_plan() -> dict[str, Any]:
         "runtime_profile": _find_runtime(runtime["id"]),
         "model": recommendation.get("selected"),
         "runtime_options": RUNTIME_PROFILES,
-        "model_options": MODEL_CATALOG,
+        "model_options": model_options,
         "install_plan": {
             **install_plan,
             "blocked": not recommendation.get("supported", False) or not capability.get("supported", False),
@@ -262,18 +358,22 @@ def get_runtime_plan() -> dict[str, Any]:
 
 def _model_download_command(runtime_home: Path, model: dict[str, Any], target_dir: Path) -> list[str]:
     python = runtime_home / "venv" / "bin" / "python"
-    script = (
-        "from huggingface_hub import hf_hub_download, snapshot_download;"
-        f"repo={model['repo']!r}.split('huggingface.co/')[-1];"
-        f"target={str(target_dir)!r};"
-        f"filename={model['filename']!r};"
-        "import os;"
-        "os.makedirs(target, exist_ok=True);"
-        "if filename.startswith('mlx-'):"
-        " snapshot_download(repo_id=repo, local_dir=target, local_dir_use_symlinks=False);"
-        "else:"
-        " path=hf_hub_download(repo_id=repo, filename=filename, local_dir=target, local_dir_use_symlinks=False);"
-        " print(path)"
+    repo = _normalize_repo_id(str(model["repo"]))
+    filename = str(model.get("filename") or "")
+    script = "\n".join(
+        [
+            "from huggingface_hub import hf_hub_download, snapshot_download",
+            "import os",
+            f"repo = {repo!r}",
+            f"target = {str(target_dir)!r}",
+            f"filename = {filename!r}",
+            "os.makedirs(target, exist_ok=True)",
+            "if not filename or filename.startswith('mlx-'):",
+            "    snapshot_download(repo_id=repo, local_dir=target, local_dir_use_symlinks=False)",
+            "else:",
+            "    path = hf_hub_download(repo_id=repo, filename=filename, local_dir=target, local_dir_use_symlinks=False)",
+            "    print(path)",
+        ]
     )
     return [str(python), "-c", script]
 
@@ -378,7 +478,7 @@ def start_runtime(*, runtime_id: str | None = None, model_id: str | None = None)
     plan = get_runtime_plan()
     runtime_id = runtime_id or plan["runtime"]["id"]
     model_id = model_id or plan["recommendation"].get("selected_model_id")
-    model = _find_model(model_id)
+    model = _resolve_model_record(model_id)
     if model is None:
         raise RuntimeError("No compatible model selected for this host.")
 
