@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, ExternalLink } from "lucide-react";
 
-import { getInstallTask, installRuntime, saveSettings, startRuntime, stopRuntime } from "@/lib/api";
-import type { NipuxSummary, SettingsUpdate } from "@/lib/types";
+import { getInstallTask, installRuntime, saveSettings, startRuntime } from "@/lib/api";
+import type { NipuxSummary, RuntimeModel, SettingsUpdate } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,51 +17,56 @@ function panelLabel(label: string) {
   );
 }
 
-function modelLabel(model: {
-  id: string;
-  family: string;
-  size: string;
-  quantization: string;
-}) {
+function modelLabel(model: RuntimeModel) {
   if (model.id === "custom") {
     return model.family === "Custom" ? "Custom model" : model.family;
   }
   return `${model.family} ${model.size} ${model.quantization}`;
 }
 
-function CheckboxRow({
-  checked,
+function OptionTile({
+  active,
   label,
-  onChange,
+  body,
+  onClick,
 }: {
-  checked: boolean;
+  active: boolean;
   label: string;
-  onChange: (next: boolean) => void;
+  body: string;
+  onClick: () => void;
 }) {
   return (
-    <label className="flex items-center gap-3 text-[14px] text-[var(--foreground)]">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-        className="h-4 w-4 rounded-none border border-[var(--border)] bg-transparent"
-      />
-      <span>{label}</span>
-    </label>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`border px-4 py-4 text-left transition-colors ${
+        active
+          ? "border-[var(--border-strong)] bg-white/[0.03]"
+          : "border-[var(--border)] bg-transparent hover:border-[var(--border-strong)]"
+      }`}
+    >
+      <div className="text-[14px] text-[var(--foreground)]">{label}</div>
+      <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">{body}</div>
+    </button>
   );
 }
+
+function selectClassName() {
+  return "h-12 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none";
+}
+
+const STEPS = ["Provider", "Runtime", "Review"];
 
 export function RuntimeSetupPanel({
   summary,
   refresh,
-  mode = "dashboard",
   onComplete,
 }: {
   summary: NipuxSummary;
   refresh: () => Promise<NipuxSummary>;
-  mode?: "setup" | "dashboard";
   onComplete?: () => void;
 }) {
+  const [step, setStep] = useState(0);
   const [runtimeChoice, setRuntimeChoice] = useState("");
   const [modelChoice, setModelChoice] = useState("");
   const [providerMode, setProviderMode] = useState("local");
@@ -150,7 +156,10 @@ export function RuntimeSetupPanel({
           if (!active) {
             return;
           }
-          setInstallLogs(task.detail.logs ?? []);
+          const nextLogs = task.detail.logs ?? [];
+          setInstallLogs((current) =>
+            JSON.stringify(current) === JSON.stringify(nextLogs) ? current : nextLogs,
+          );
           if (task.status === "completed" || task.status === "failed") {
             void refresh();
           }
@@ -163,32 +172,27 @@ export function RuntimeSetupPanel({
     };
   }, [refresh, summary.runtime_state.install_task_id]);
 
-  function validate(): string | null {
-    if (providerMode === "external") {
-      if (!endpoint.trim()) {
-        return "External mode requires an endpoint.";
-      }
-      if (!modelName.trim()) {
-        return "External mode requires a model name.";
-      }
-      return null;
-    }
-
-    if (!runtimeChoice.trim()) {
-      return "Choose a runtime.";
-    }
-    if (!modelChoice.trim()) {
-      return "Choose a model.";
-    }
-    if (modelChoice === "custom" && !customModelRepo.trim()) {
-      return "Custom model installs require a Hugging Face repo or file link.";
-    }
-    return null;
-  }
+  const selectedRuntime = runtimeOptions.find((runtime) => runtime.id === runtimeChoice) ?? null;
+  const selectedModel = modelOptions.find((model) => model.id === modelChoice) ?? null;
+  const installBusy = Boolean(summary.runtime_state.install_task_id);
+  const externalSelectionReady = Boolean(endpoint.trim() && modelName.trim());
+  const selectionMatchesConfigured =
+    providerMode === "local" &&
+    summary.runtime_state.runtime_id === runtimeChoice &&
+    (summary.runtime_state.active_model_id === modelChoice ||
+      summary.runtime_state.recommended_model_id === modelChoice);
+  const canEnterDashboard =
+    providerMode === "external"
+      ? Boolean(summary.settings.setup_completed && endpoint.trim() && modelName.trim())
+      : Boolean(
+          summary.runtime_state.model_loaded &&
+            summary.runtime_state.runtime_id === runtimeChoice &&
+            summary.runtime_state.active_model_id === modelChoice,
+        );
 
   function settingsPayload(markSetupComplete = false): SettingsUpdate {
     return {
-      setup_completed: summary.settings.setup_completed || markSetupComplete,
+      setup_completed: markSetupComplete,
       provider_mode: providerMode,
       openai_base_url: endpoint.trim(),
       openai_api_key: apiKey.trim(),
@@ -206,12 +210,28 @@ export function RuntimeSetupPanel({
     };
   }
 
-  async function withPending<T>(key: string, task: () => Promise<T>) {
-    const problem = validate();
-    if (problem) {
-      setActionError(problem);
-      throw new Error(problem);
+  function validateStep(targetStep = step): string | null {
+    if (targetStep === 0) {
+      return providerMode.trim() ? null : "Choose how Nipux should reach a model.";
     }
+    if (targetStep === 1) {
+      if (providerMode === "external") {
+        return externalSelectionReady ? null : "External mode needs an endpoint and model name.";
+      }
+      if (!runtimeChoice.trim()) {
+        return "Choose a runtime.";
+      }
+      if (!modelChoice.trim()) {
+        return "Choose a model.";
+      }
+      if (modelChoice === "custom" && !customModelRepo.trim()) {
+        return "Custom installs need a Hugging Face repo or file link.";
+      }
+    }
+    return null;
+  }
+
+  async function withPending<T>(key: string, task: () => Promise<T>) {
     setPendingAction(key);
     setActionError(null);
     try {
@@ -224,19 +244,16 @@ export function RuntimeSetupPanel({
     }
   }
 
-  async function handleSave(markSetupComplete = false) {
+  async function saveDraft() {
     await withPending("save", async () => {
-      await saveSettings(settingsPayload(markSetupComplete));
+      await saveSettings(settingsPayload(false));
     });
     await refresh();
   }
 
   async function handleInstall() {
-    if (providerMode !== "local") {
-      return;
-    }
     await withPending("install", async () => {
-      await saveSettings(settingsPayload(true));
+      await saveSettings(settingsPayload(false));
       await installRuntime({
         runtime_id: runtimeChoice,
         model_id: modelChoice,
@@ -245,253 +262,433 @@ export function RuntimeSetupPanel({
     await refresh();
   }
 
-  async function handleRuntimeToggle() {
-    if (providerMode !== "local") {
-      return;
-    }
-    await withPending("runtime", async () => {
+  async function handleStart() {
+    await withPending("start", async () => {
+      await saveSettings(settingsPayload(false));
+      await startRuntime({
+        runtime_id: runtimeChoice,
+        model_id: modelChoice,
+      });
       await saveSettings(settingsPayload(true));
-      if (summary.runtime_state.model_loaded) {
-        await stopRuntime();
-      } else {
-        await startRuntime({
-          runtime_id: runtimeChoice,
-          model_id: modelChoice,
-        });
-      }
     });
     await refresh();
-  }
-
-  async function handleContinue() {
-    await handleSave(true);
     onComplete?.();
   }
 
+  async function handleFinishExternal() {
+    await withPending("finish", async () => {
+      await saveSettings(settingsPayload(true));
+    });
+    await refresh();
+    onComplete?.();
+  }
+
+  async function handlePrimaryAction() {
+    if (step < 2) {
+      const problem = validateStep(step);
+      if (problem) {
+        setActionError(problem);
+        return;
+      }
+      setActionError(null);
+      setStep((current) => Math.min(current + 1, 2));
+      return;
+    }
+
+    if (providerMode === "external") {
+      await handleFinishExternal();
+      return;
+    }
+
+    if (canEnterDashboard) {
+      onComplete?.();
+      return;
+    }
+
+    if (installBusy) {
+      return;
+    }
+
+    if (
+      !summary.runtime_state.runtime_installed ||
+      !selectionMatchesConfigured ||
+      !summary.runtime_state.model_available
+    ) {
+      await handleInstall();
+      return;
+    }
+
+    await handleStart();
+  }
+
+  const primaryLabel =
+    step < 2
+      ? "Continue"
+      : providerMode === "external"
+        ? "Save and enter dashboard"
+        : canEnterDashboard
+          ? "Enter dashboard"
+          : installBusy
+            ? "Installing…"
+            : !summary.runtime_state.runtime_installed || !selectionMatchesConfigured || !summary.runtime_state.model_available
+              ? "Install runtime and model"
+              : "Start runtime";
+
   return (
-    <div className="grid h-full min-h-0 min-w-0 gap-px bg-[var(--border)] lg:grid-cols-[minmax(0,1fr)_280px]">
-      <section className="min-h-0 bg-[var(--background)]">
-        <div className="grid gap-px bg-[var(--border)] md:grid-cols-2">
-          <div className="bg-[var(--background)] px-5 py-5 md:px-6">
-            {panelLabel("provider")}
-            <div className="mt-4 grid gap-4">
-              <div className="grid gap-2">
-                <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                  Mode
-                </label>
-                <select
-                  value={providerMode}
-                  onChange={(event) => setProviderMode(event.target.value)}
-                  className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
-                >
-                  <option value="local" className="bg-[var(--background)]">
-                    Local runtime
-                  </option>
-                  <option value="external" className="bg-[var(--background)]">
-                    External endpoint
-                  </option>
-                </select>
+    <div className="grid h-full min-h-[620px] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="flex min-h-0 flex-col">
+        <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              {panelLabel("guided setup")}
+              <div className="mt-3 text-[24px] font-medium tracking-[-0.06em] text-[var(--foreground)] md:text-[34px]">
+                {STEPS[step]}
+              </div>
+            </div>
+            <Badge variant="secondary">{`${step + 1} / ${STEPS.length}`}</Badge>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            {STEPS.map((label, index) => (
+              <div key={label} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`h-2 w-2 ${
+                      index <= step ? "bg-[var(--foreground)]" : "bg-[var(--foreground)]/16"
+                    }`}
+                  />
+                  <div className="nipux-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                    {label}
+                  </div>
+                </div>
+                <div className={`h-px ${index <= step ? "bg-[var(--border-strong)]" : "bg-[var(--border)]"}`} />
+              </div>
+            ))}
+          </div>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-5 md:px-6">
+          {step === 0 ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              <OptionTile
+                active={providerMode === "local"}
+                label="Local runtime"
+                body="Install a runtime on this machine, download a model, and run the agent stack locally."
+                onClick={() => setProviderMode("local")}
+              />
+              <OptionTile
+                active={providerMode === "external"}
+                label="External endpoint"
+                body="Point Nipux at an existing OpenAI-compatible endpoint and skip local runtime setup."
+                onClick={() => setProviderMode("external")}
+              />
+
+              <div className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("workspace")}
+                <div className="mt-3 space-y-3">
+                  <Input
+                    value={workspaceRoot}
+                    onChange={(event) => setWorkspaceRoot(event.target.value)}
+                    placeholder="Workspace root"
+                  />
+                  <label className="flex items-center gap-3 text-[14px] text-[var(--foreground)]">
+                    <input
+                      type="checkbox"
+                      checked={browserHeadless}
+                      onChange={(event) => setBrowserHeadless(event.target.checked)}
+                      className="h-4 w-4 rounded-none border border-[var(--border)] bg-transparent"
+                    />
+                    <span>Run browser headless</span>
+                  </label>
+                </div>
               </div>
 
-              {providerMode === "external" ? (
-                <>
-                  <Input
-                    value={endpoint}
-                    onChange={(event) => setEndpoint(event.target.value)}
-                    placeholder="OpenAI-compatible endpoint"
-                  />
-                  <Input
-                    value={modelName}
-                    onChange={(event) => setModelName(event.target.value)}
-                    placeholder="Model name"
-                  />
-                  <Input
-                    value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
-                    placeholder="API key (optional)"
-                  />
-                </>
-              ) : (
-                <>
-                  <div className="grid gap-2">
-                    <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                      Runtime
-                    </label>
-                    <select
-                      value={runtimeChoice}
-                      onChange={(event) => setRuntimeChoice(event.target.value)}
-                      className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
-                    >
-                      {runtimeOptions.map((runtime) => (
-                        <option key={runtime.id} value={runtime.id} className="bg-[var(--background)]">
-                          {runtime.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <div className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("recommended")}
+                <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  Use Carnice locally if you want the default path. If you need a different model, choose
+                  Custom model in the next step and paste a Hugging Face repo or file link.
+                </div>
+              </div>
+            </div>
+          ) : null}
 
-                  <div className="grid gap-2">
-                    <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                      Model
-                    </label>
-                    <select
-                      value={modelChoice}
-                      onChange={(event) => setModelChoice(event.target.value)}
-                      className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
-                    >
-                      {modelOptions.map((model) => (
-                        <option key={model.id} value={model.id} className="bg-[var(--background)]">
-                          {modelLabel(model)}
-                        </option>
-                      ))}
-                    </select>
+          {step === 1 ? (
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-5">
+                {providerMode === "external" ? (
+                  <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                    {panelLabel("endpoint")}
+                    <Input
+                      value={endpoint}
+                      onChange={(event) => setEndpoint(event.target.value)}
+                      placeholder="OpenAI-compatible endpoint"
+                    />
+                    <Input
+                      value={modelName}
+                      onChange={(event) => setModelName(event.target.value)}
+                      placeholder="Model name"
+                    />
+                    <Input
+                      value={apiKey}
+                      onChange={(event) => setApiKey(event.target.value)}
+                      placeholder="API key (optional)"
+                    />
                   </div>
+                ) : (
+                  <>
+                    <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                      {panelLabel("runtime")}
+                      <select
+                        value={runtimeChoice}
+                        onChange={(event) => setRuntimeChoice(event.target.value)}
+                        className={selectClassName()}
+                      >
+                        {runtimeOptions.map((runtime) => (
+                          <option key={runtime.id} value={runtime.id} className="bg-[var(--background)]">
+                            {runtime.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                  {modelChoice === "custom" ? (
-                    <div className="grid gap-3">
-                      <Input
-                        value={customModelName}
-                        onChange={(event) => setCustomModelName(event.target.value)}
-                        placeholder="Custom model label"
-                      />
-                      <Input
-                        value={customModelRepo}
-                        onChange={(event) => setCustomModelRepo(event.target.value)}
-                        placeholder="Hugging Face repo or file URL"
-                      />
-                      <Input
-                        value={customModelFilename}
-                        onChange={(event) => setCustomModelFilename(event.target.value)}
-                        placeholder="Filename override (optional)"
-                      />
-                      <Input
-                        value={customModelSizeGb}
-                        onChange={(event) => setCustomModelSizeGb(event.target.value)}
-                        placeholder="Approx size in GB"
-                      />
+                    <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                      {panelLabel("model")}
+                      <select
+                        value={modelChoice}
+                        onChange={(event) => setModelChoice(event.target.value)}
+                        className={selectClassName()}
+                      >
+                        {modelOptions.map((model) => (
+                          <option key={model.id} value={model.id} className="bg-[var(--background)]">
+                            {modelLabel(model)}
+                          </option>
+                        ))}
+                      </select>
+
+                      {modelChoice === "custom" ? (
+                        <div className="grid gap-3">
+                          <Input
+                            value={customModelName}
+                            onChange={(event) => setCustomModelName(event.target.value)}
+                            placeholder="Custom model label"
+                          />
+                          <Input
+                            value={customModelRepo}
+                            onChange={(event) => setCustomModelRepo(event.target.value)}
+                            placeholder="Hugging Face repo or file URL"
+                          />
+                          <Input
+                            value={customModelFilename}
+                            onChange={(event) => setCustomModelFilename(event.target.value)}
+                            placeholder="Filename override (optional)"
+                          />
+                          <Input
+                            value={customModelSizeGb}
+                            onChange={(event) => setCustomModelSizeGb(event.target.value)}
+                            placeholder="Approx size in GB"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <aside className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("selection")}
+                <div className="mt-4 space-y-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  <div>Mode: {providerMode === "local" ? "Local runtime" : "External endpoint"}</div>
+                  {providerMode === "local" ? (
+                    <>
+                      <div>Runtime: {selectedRuntime?.label ?? "Choose a runtime"}</div>
+                      <div>Model: {selectedModel ? modelLabel(selectedModel) : "Choose a model"}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div>Endpoint: {endpoint || "Not set"}</div>
+                      <div>Model: {modelName || "Not set"}</div>
+                    </>
+                  )}
+                  <div>Workspace: {workspaceRoot || "Default workspace"}</div>
+                </div>
+
+                <div className="mt-6 space-y-2">
+                  <a
+                    href="https://huggingface.co/kai-os/Carnice-9b-GGUF"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-[13px] text-[var(--foreground)]"
+                  >
+                    Carnice 9B
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                  <a
+                    href="https://huggingface.co/kai-os/Carnice-27b-GGUF"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-[13px] text-[var(--foreground)]"
+                  >
+                    Carnice 27B
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </div>
+              </aside>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-5">
+                <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                  {panelLabel("review")}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="text-[14px] text-[var(--foreground)]">Provider</div>
+                      <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                        {providerMode === "local" ? "Local runtime" : "External endpoint"}
+                      </div>
+                    </div>
+                    <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="text-[14px] text-[var(--foreground)]">Workspace</div>
+                      <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                        {workspaceRoot || "Default workspace"}
+                      </div>
+                    </div>
+                    {providerMode === "local" ? (
+                      <>
+                        <div className="border border-[var(--border)] px-4 py-4">
+                          <div className="text-[14px] text-[var(--foreground)]">Runtime</div>
+                          <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                            {selectedRuntime?.label ?? "Not selected"}
+                          </div>
+                        </div>
+                        <div className="border border-[var(--border)] px-4 py-4">
+                          <div className="text-[14px] text-[var(--foreground)]">Model</div>
+                          <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                            {selectedModel ? modelLabel(selectedModel) : "Not selected"}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="border border-[var(--border)] px-4 py-4">
+                          <div className="text-[14px] text-[var(--foreground)]">Endpoint</div>
+                          <div className="mt-2 break-all text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                            {endpoint || "Not set"}
+                          </div>
+                        </div>
+                        <div className="border border-[var(--border)] px-4 py-4">
+                          <div className="text-[14px] text-[var(--foreground)]">Model</div>
+                          <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                            {modelName || "Not set"}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {providerMode === "local" ? (
+                  <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                    {panelLabel("provisioning")}
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="text-[14px] text-[var(--foreground)]">Runtime install</div>
+                        <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
+                          {summary.runtime_state.runtime_installed ? "Ready" : "Pending"}
+                        </div>
+                      </div>
+                      <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="text-[14px] text-[var(--foreground)]">Model payload</div>
+                        <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
+                          {summary.runtime_state.model_available && selectionMatchesConfigured ? "Ready" : "Pending"}
+                        </div>
+                      </div>
+                      <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="text-[14px] text-[var(--foreground)]">Runtime health</div>
+                        <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
+                          {summary.runtime_state.model_loaded && canEnterDashboard ? "Running" : "Not live"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <aside className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("status")}
+                <div className="mt-4 space-y-4">
+                  {providerMode === "local" ? (
+                    <div className="space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                      <div>Disk estimate: {summary.runtime_plan.install_plan.estimated_disk_needed_gb.toFixed(1)} GB</div>
+                      <div>Endpoint: {summary.runtime_state.endpoint || "Not started"}</div>
+                    </div>
+                  ) : (
+                    <div className="text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                      Nipux will save the external endpoint and send you straight to the dashboard.
+                    </div>
+                  )}
+
+                  {summary.runtime_plan.install_plan.warnings.length ? (
+                    <div className="border border-[var(--border)] px-4 py-4 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                      {summary.runtime_plan.install_plan.warnings.map((warning) => (
+                        <div key={warning}>{warning}</div>
+                      ))}
                     </div>
                   ) : null}
-                </>
-              )}
-            </div>
-          </div>
 
-          <div className="bg-[var(--background)] px-5 py-5 md:px-6">
-            {panelLabel("options")}
-            <div className="mt-4 grid gap-4">
-              <Input
-                value={workspaceRoot}
-                onChange={(event) => setWorkspaceRoot(event.target.value)}
-                placeholder="Workspace root"
-              />
-              <CheckboxRow
-                checked={browserHeadless}
-                label="Run browser headless"
-                onChange={setBrowserHeadless}
-              />
-              <div className="border border-[var(--border)] px-4 py-4 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-                Carnice is the recommended local path right now. You can also paste any Hugging Face repo
-                or file link if you want to install something else.
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href="https://huggingface.co/kai-os/Carnice-9b-GGUF"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--foreground)]"
-                >
-                  Carnice 9B
-                </a>
-                <a
-                  href="https://huggingface.co/kai-os/Carnice-27b-GGUF"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--foreground)]"
-                >
-                  Carnice 27B
-                </a>
-              </div>
+                  {actionError || summary.runtime_state.last_error ? (
+                    <div className="border border-[var(--danger)]/45 px-4 py-4 text-[13px] leading-[1.7] text-[#d8a499]">
+                      {actionError || summary.runtime_state.last_error}
+                    </div>
+                  ) : null}
+
+                  <div>
+                    {panelLabel("install log")}
+                    <div className="mt-3 space-y-2 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/78">
+                      {(installLogs.length ? installLogs.slice(-10) : summary.log_lines.slice(-10)).map((line, index) => (
+                        <div key={`${line}-${index}`}>{line}</div>
+                      ))}
+                      {!installLogs.length && !summary.log_lines.length ? (
+                        <div className="text-[var(--muted-foreground)]">No log output yet.</div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </aside>
             </div>
-          </div>
+          ) : null}
         </div>
 
-        <div className="border-t border-[var(--border)] px-5 py-5 md:px-6">
-          <div className="flex flex-wrap gap-2">
+        <footer className="flex items-center justify-between border-t border-[var(--border)] px-5 py-4 md:px-6">
+          <div className="flex items-center gap-3">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void handleSave(mode === "setup")}
-              disabled={pendingAction === "save"}
+              onClick={() => setStep((current) => Math.max(current - 1, 0))}
+              disabled={step === 0 || pendingAction !== null}
             >
-              Save choices
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
             </Button>
-            {providerMode === "local" ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleInstall()}
-                  disabled={pendingAction === "install"}
-                >
-                  Install runtime
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => void handleRuntimeToggle()}
-                  disabled={pendingAction === "runtime"}
-                >
-                  {summary.runtime_state.model_loaded ? "Stop runtime" : "Start runtime"}
-                </Button>
-              </>
-            ) : null}
-            {mode === "setup" ? (
-              <Button size="sm" onClick={() => void handleContinue()} disabled={pendingAction === "save"}>
-                Continue
-              </Button>
-            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void saveDraft()}
+              disabled={pendingAction !== null}
+            >
+              Save draft
+            </Button>
           </div>
-          {actionError ? (
-            <p className="mt-4 text-[13px] leading-[1.6] text-[#d8a499]">{actionError}</p>
-          ) : null}
-        </div>
-      </section>
 
-      <aside className="min-h-0 overflow-auto bg-[var(--background)] px-5 py-5">
-        {panelLabel(mode === "setup" ? "setup status" : "status")}
-        <div className="mt-4 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[14px] text-[var(--foreground)]">Runtime</div>
-            <Badge variant={summary.runtime_state.model_loaded ? "success" : "secondary"}>
-              {summary.runtime_state.model_loaded ? "live" : "stopped"}
-            </Badge>
-          </div>
-          <div className="space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-            <div>Runtime: {summary.runtime_plan.runtime.label}</div>
-            <div>
-              Model: {summary.runtime_plan.model ? modelLabel(summary.runtime_plan.model) : "None selected"}
-            </div>
-            <div>Disk: {summary.runtime_plan.install_plan.estimated_disk_needed_gb.toFixed(1)} GB</div>
-          </div>
-          {summary.runtime_plan.install_plan.warnings.length ? (
-            <div className="border border-[var(--border)] px-4 py-4 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-              {summary.runtime_plan.install_plan.warnings.map((warning) => (
-                <div key={warning}>{warning}</div>
-              ))}
-            </div>
-          ) : null}
-          <div>
-            {panelLabel("install log")}
-            <div className="mt-3 space-y-2 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/78">
-              {(installLogs.length ? installLogs.slice(-10) : summary.log_lines.slice(-10)).map((line, index) => (
-                <div key={`${line}-${index}`}>{line}</div>
-              ))}
-              {!installLogs.length && !summary.log_lines.length ? (
-                <div className="text-[var(--muted-foreground)]">No log output yet.</div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </aside>
+          <Button size="sm" onClick={() => void handlePrimaryAction()} disabled={pendingAction !== null || (step === 2 && installBusy)}>
+            {step === 2 && canEnterDashboard ? <Check className="mr-2 h-4 w-4" /> : null}
+            {primaryLabel}
+            {step < 2 ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
+          </Button>
+        </footer>
+      </section>
     </div>
   );
 }

@@ -52,6 +52,22 @@ class RuntimeAdapter:
         raise NotImplementedError
 
 
+def _venv_dir(runtime_home: Path) -> Path:
+    return runtime_home / "venv"
+
+
+def _venv_python(runtime_home: Path) -> Path:
+    return _venv_dir(runtime_home) / "bin" / "python"
+
+
+def _fresh_venv_command(runtime_home: Path) -> list[str]:
+    return ["python3", "-m", "venv", "--clear", str(_venv_dir(runtime_home))]
+
+
+def _pip_install_command(runtime_home: Path, *packages: str) -> list[str]:
+    return [str(_venv_python(runtime_home)), "-m", "pip", "install", "--no-cache-dir", *packages]
+
+
 class MlxAdapter(RuntimeAdapter):
     runtime_id = "mlx"
     label = "MLX"
@@ -63,17 +79,14 @@ class MlxAdapter(RuntimeAdapter):
         }
 
     def install_commands(self, runtime_home: Path) -> list[list[str]]:
-        python = runtime_home / "venv" / "bin" / "python"
         return [
-            ["python3", "-m", "venv", str(runtime_home / "venv")],
-            [str(python), "-m", "pip", "install", "--upgrade", "pip"],
-            [str(python), "-m", "pip", "install", "mlx-lm", "huggingface_hub"],
+            _fresh_venv_command(runtime_home),
+            _pip_install_command(runtime_home, "mlx-lm", "huggingface_hub"),
         ]
 
     def start_command(self, *, runtime_home: Path, model_path: Path, port: int) -> list[str]:
-        python = runtime_home / "venv" / "bin" / "python"
         return [
-            str(python),
+            str(_venv_python(runtime_home)),
             "-m",
             "mlx_lm.server",
             "--model",
@@ -98,17 +111,14 @@ class VllmAdapter(RuntimeAdapter):
         }
 
     def install_commands(self, runtime_home: Path) -> list[list[str]]:
-        python = runtime_home / "venv" / "bin" / "python"
         return [
-            ["python3", "-m", "venv", str(runtime_home / "venv")],
-            [str(python), "-m", "pip", "install", "--upgrade", "pip"],
-            [str(python), "-m", "pip", "install", "vllm", "huggingface_hub"],
+            _fresh_venv_command(runtime_home),
+            _pip_install_command(runtime_home, "vllm", "huggingface_hub"),
         ]
 
     def start_command(self, *, runtime_home: Path, model_path: Path, port: int) -> list[str]:
-        python = runtime_home / "venv" / "bin" / "python"
         return [
-            str(python),
+            str(_venv_python(runtime_home)),
             "-m",
             "vllm.entrypoints.openai.api_server",
             "--model",
@@ -125,12 +135,12 @@ class LlamaCppAdapter(RuntimeAdapter):
     label = "llama.cpp"
 
     def install_commands(self, runtime_home: Path) -> list[list[str]]:
-        python = runtime_home / "venv" / "bin" / "python"
-        return [
-            ["python3", "-m", "venv", str(runtime_home / "venv")],
-            [str(python), "-m", "pip", "install", "--upgrade", "pip"],
-            [str(python), "-m", "pip", "install", "llama-cpp-python[server]", "huggingface_hub"],
-        ]
+        commands = [_fresh_venv_command(runtime_home)]
+        if shutil.which("llama-server"):
+            commands.append(_pip_install_command(runtime_home, "huggingface_hub"))
+            return commands
+        commands.append(_pip_install_command(runtime_home, "llama-cpp-python[server]", "huggingface_hub"))
+        return commands
 
     def start_command(self, *, runtime_home: Path, model_path: Path, port: int) -> list[str]:
         server_bin = shutil.which("llama-server")
@@ -144,9 +154,8 @@ class LlamaCppAdapter(RuntimeAdapter):
                 "--port",
                 str(port),
             ]
-        python = runtime_home / "venv" / "bin" / "python"
         return [
-            str(python),
+            str(_venv_python(runtime_home)),
             "-m",
             "llama_cpp.server",
             "--model",
@@ -357,7 +366,6 @@ def get_runtime_plan() -> dict[str, Any]:
 
 
 def _model_download_command(runtime_home: Path, model: dict[str, Any], target_dir: Path) -> list[str]:
-    python = runtime_home / "venv" / "bin" / "python"
     repo = _normalize_repo_id(str(model["repo"]))
     filename = str(model.get("filename") or "")
     script = "\n".join(
@@ -375,7 +383,45 @@ def _model_download_command(runtime_home: Path, model: dict[str, Any], target_di
             "    print(path)",
         ]
     )
-    return [str(python), "-c", script]
+    return [str(_venv_python(runtime_home)), "-c", script]
+
+
+def _resolve_model_launch_path(model: dict[str, Any], model_home: Path) -> Path:
+    artifact_kind = str(model.get("artifact_kind") or "").strip()
+    filename = str(model.get("filename") or "").strip()
+
+    if artifact_kind == "gguf":
+        if filename:
+            candidate = model_home / filename
+            if candidate.exists():
+                return candidate
+        matches = sorted(model_home.glob("*.gguf"))
+        if matches:
+            return matches[0]
+        return model_home / filename if filename else model_home
+
+    return model_home
+
+
+def _tail_file(path: Path, limit: int = 8000) -> str:
+    if not path.exists():
+        return ""
+    try:
+        content = path.read_text(errors="replace")
+    except Exception:
+        return ""
+    return content[-limit:].strip()
+
+
+def _terminate_process_group(pid: int | None) -> None:
+    if not pid:
+        return
+    try:
+        os.killpg(int(pid), signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except Exception:
+        return
 
 
 def _run_install_task(task_id: str, runtime_id: str, runtime_home: Path, model: dict[str, Any] | None) -> None:
@@ -426,6 +472,18 @@ def start_install_task(plan: dict[str, Any]) -> dict[str, Any]:
     return get_install_task(task["id"]) or task
 
 
+def _runtime_is_installed(runtime_id: str) -> bool:
+    if runtime_id == "llama.cpp" and shutil.which("llama-server"):
+        return True
+    return _venv_python(_runtime_home(runtime_id)).exists()
+
+
+def _model_is_available(model: dict[str, Any] | None) -> bool:
+    if model is None:
+        return False
+    return _resolve_model_launch_path(model, _model_home(model["id"])).exists()
+
+
 def get_runtime_status() -> dict[str, Any]:
     state = get_runtime_state()
     task_id = state.get("install_task_id")
@@ -470,7 +528,13 @@ def get_runtime_status() -> dict[str, Any]:
                 )
             else:
                 update_runtime_state(last_health=health)
-    return {**state, "health": health}
+    model = _resolve_model_record(str(state.get("active_model_id") or state.get("recommended_model_id") or "") or None)
+    return {
+        **state,
+        "health": health,
+        "runtime_installed": _runtime_is_installed(str(state.get("runtime_id") or "")),
+        "model_available": _model_is_available(model),
+    }
 
 
 def save_runtime_preferences(*, runtime_id: str | None = None, model_id: str | None = None) -> None:
@@ -495,10 +559,13 @@ def start_runtime(*, runtime_id: str | None = None, model_id: str | None = None)
     model_home = _model_home(model["id"])
     runtime_home.mkdir(parents=True, exist_ok=True)
     model_home.mkdir(parents=True, exist_ok=True)
+    launch_path = _resolve_model_launch_path(model, model_home)
+    if not launch_path.exists():
+        raise RuntimeError(f"Model artifact not found at {launch_path}")
 
     endpoint = _endpoint_for(runtime_id)
     port = DEFAULT_PORTS.get(runtime_id, 8000)
-    command = adapter.start_command(runtime_home=runtime_home, model_path=model_home, port=port)
+    command = adapter.start_command(runtime_home=runtime_home, model_path=launch_path, port=port)
     log_path = runtime_home / "runtime.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("a")
@@ -509,6 +576,7 @@ def start_runtime(*, runtime_id: str | None = None, model_id: str | None = None)
         cwd=str(runtime_home),
         start_new_session=True,
     )
+    log_handle.close()
 
     update_runtime_state(
         runtime_id=runtime_id,
@@ -517,7 +585,7 @@ def start_runtime(*, runtime_id: str | None = None, model_id: str | None = None)
         active_model_id=model["id"],
         recommended_model_id=model["id"],
         endpoint=endpoint,
-        model_path=str(model_home),
+        model_path=str(launch_path),
         started_at=time.time(),
         pid=process.pid,
         last_error=None,
@@ -534,11 +602,37 @@ def start_runtime(*, runtime_id: str | None = None, model_id: str | None = None)
             update_runtime_state(status="running", model_loaded=True, last_health=health)
             publish("system", "runtime", "runtime.started", {"runtime_id": runtime_id, "model_id": model["id"], "endpoint": endpoint})
             return get_runtime_status()
+        exit_code = process.poll()
+        if exit_code is not None:
+            log_tail = _tail_file(log_path)
+            error = f"Runtime exited with code {exit_code}."
+            if log_tail:
+                error = f"{error}\n\n{log_tail}"
+            update_runtime_state(
+                status="error",
+                model_loaded=False,
+                pid=None,
+                last_health={},
+                last_error=error,
+            )
+            publish(
+                "system",
+                "runtime",
+                "runtime.health.error",
+                {"runtime_id": runtime_id, "endpoint": endpoint, "error": error},
+                level="error",
+            )
+            raise RuntimeError(error)
         time.sleep(1.0)
 
-    update_runtime_state(status="error", model_loaded=False, last_error="Runtime failed health check after launch.")
-    publish("system", "runtime", "runtime.health.error", {"runtime_id": runtime_id, "endpoint": endpoint}, level="error")
-    raise RuntimeError("Runtime failed health check after launch.")
+    _terminate_process_group(process.pid)
+    log_tail = _tail_file(log_path)
+    error = "Runtime failed health check after launch."
+    if log_tail:
+        error = f"{error}\n\n{log_tail}"
+    update_runtime_state(status="error", model_loaded=False, pid=None, last_health={}, last_error=error)
+    publish("system", "runtime", "runtime.health.error", {"runtime_id": runtime_id, "endpoint": endpoint, "error": error}, level="error")
+    raise RuntimeError(error)
 
 
 def stop_runtime() -> dict[str, Any]:

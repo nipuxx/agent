@@ -42,6 +42,8 @@ export interface RuntimeStateSummary {
   runtime_id?: string | null;
   status: string;
   model_loaded: boolean;
+  runtime_installed?: boolean;
+  model_available?: boolean;
   active_model_id?: string | null;
   recommended_model_id?: string | null;
   endpoint?: string | null;

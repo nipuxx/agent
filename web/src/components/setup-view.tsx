@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import { AppShell } from "./app-shell";
 import { RuntimeSetupPanel } from "./runtime-setup-panel";
 import { useLiveSummary } from "@/lib/use-live-summary";
+import { Badge } from "@/components/ui/badge";
 
 function panelLabel(label: string) {
   return (
@@ -14,65 +16,113 @@ function panelLabel(label: string) {
   );
 }
 
+const STEPS = [
+  "Choose how Nipux reaches a model",
+  "Choose the runtime and model",
+  "Install, start, and enter the workspace",
+];
+
 export function SetupView() {
   const router = useRouter();
   const { summary, loading, error, refresh } = useLiveSummary();
 
   if (loading && !summary) {
     return (
-      <AppShell>
-        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
-          Booting Nipux...
-        </div>
-      </AppShell>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6 text-[14px] text-[var(--muted-foreground)]">
+        Booting setup…
+      </div>
     );
   }
 
   if (!summary) {
     return (
-      <AppShell>
-        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
-          {error ?? "Setup is unavailable."}
-        </div>
-      </AppShell>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-6 text-[14px] text-[var(--muted-foreground)]">
+        {error ?? "Setup is unavailable."}
+      </div>
     );
   }
 
   return (
-    <AppShell>
-      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] border-r border-[var(--border)]">
-          <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
-            {panelLabel("setup")}
-            <h1 className="mt-3 text-[30px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
-              First-run setup
-            </h1>
-            <p className="mt-3 max-w-[720px] text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
-              Pick the runtime, pick the model, or paste a Hugging Face link for a custom install.
-              Save it once here, then the rest of the app stays on Dashboard and Agents.
-            </p>
-          </header>
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-5 py-5 md:px-8 md:py-8">
+        <header className="flex items-center justify-between border border-[var(--border)] px-5 py-4 md:px-6">
+          <div>
+            {panelLabel("nipux setup")}
+            <div className="mt-3 text-[30px] font-medium tracking-[-0.08em] text-[var(--foreground)] md:text-[42px]">
+              Bring the runtime online.
+            </div>
+          </div>
 
-          <div className="min-h-0 overflow-auto">
+          <div className="flex items-center gap-3">
+            {summary.settings.setup_completed ? (
+              <Badge variant="success">configured</Badge>
+            ) : (
+              <Badge variant="secondary">first run</Badge>
+            )}
+            {summary.settings.setup_completed ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex h-10 items-center gap-2 border border-[var(--border)] px-4 text-[13px] text-[var(--foreground)] transition-colors hover:border-[var(--border-strong)]"
+              >
+                Dashboard
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            ) : null}
+          </div>
+        </header>
+
+        <div className="mt-5 grid min-h-0 flex-1 gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <aside className="flex min-h-[320px] flex-col justify-between border border-[var(--border)] px-5 py-5 md:px-6">
+            <div>
+              {panelLabel("flow")}
+              <div className="mt-6 space-y-4">
+                {STEPS.map((step, index) => (
+                  <div key={step} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="flex h-7 w-7 items-center justify-center border border-[var(--border)] text-[12px] text-[var(--foreground)]">
+                        {index + 1}
+                      </div>
+                      {index < STEPS.length - 1 ? (
+                        <div className="mt-2 h-8 w-px bg-[var(--border)]" />
+                      ) : null}
+                    </div>
+                    <div className="pt-1 text-[14px] leading-[1.7] text-[var(--muted-foreground)]">{step}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="border border-[var(--border)] px-4 py-4">
+              <div className="flex items-center gap-3">
+                <Sparkles className="h-4 w-4 text-[var(--foreground)]" />
+                <div className="text-[14px] text-[var(--foreground)]">Recommended today</div>
+              </div>
+              <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                Carnice stays the default local recommendation. If you need something else, paste a Hugging Face repo
+                or file link and Nipux will install that instead.
+              </div>
+            </div>
+          </aside>
+
+          <main className="min-h-[620px] border border-[var(--border)]">
             <RuntimeSetupPanel
               summary={summary}
               refresh={refresh}
-              mode="setup"
               onComplete={() => router.push("/dashboard")}
             />
-          </div>
-        </main>
+          </main>
+        </div>
 
-        <aside className="min-h-0 overflow-auto px-5 py-5 md:px-6">
-          {panelLabel("how it works")}
-          <div className="mt-4 space-y-4 text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
-            <p>1. Choose local runtime or external endpoint.</p>
-            <p>2. Pick a recommended model or paste a Hugging Face link.</p>
-            <p>3. Install or save the plan, then continue to Dashboard.</p>
-            <p>4. Create agents in Agents and give them actual work.</p>
+        <footer className="mt-5 flex items-center justify-between border border-[var(--border)] px-5 py-4 text-[12px] text-[var(--muted-foreground)] md:px-6">
+          <div className="flex items-center gap-2">
+            <Check className="h-3.5 w-3.5" />
+            Setup is the only place that installs or starts a runtime.
           </div>
-        </aside>
-      </section>
-    </AppShell>
+          <div className="nipux-mono uppercase tracking-[0.16em]">
+            Configure once, then work from Dashboard and Agents.
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }
