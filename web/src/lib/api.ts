@@ -1,6 +1,9 @@
 import type {
   AgentRecord,
   BrowserSession,
+  ChatBundle,
+  ChatMessage,
+  ChatThreadRecord,
   InstallTask,
   NipuxSettings,
   NipuxSummary,
@@ -148,6 +151,28 @@ export function getThreadBundle(threadId: string): Promise<ThreadBundle> {
 
 export function sendThreadMessage(threadId: string, body: string): Promise<ThreadMessage> {
   return fetchJson(`/api/threads/${threadId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function getChatThreads(): Promise<ChatThreadRecord[]> {
+  return fetchJson("/api/chat/threads");
+}
+
+export function createChatThread(payload?: { title?: string }): Promise<ChatThreadRecord> {
+  return fetchJson("/api/chat/threads", {
+    method: "POST",
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export function getChatBundle(threadId: string): Promise<ChatBundle> {
+  return fetchJson(`/api/chat/threads/${threadId}`);
+}
+
+export function sendChatMessage(threadId: string, body: string): Promise<ChatMessage> {
+  return fetchJson(`/api/chat/threads/${threadId}/messages`, {
     method: "POST",
     body: JSON.stringify({ body }),
   });

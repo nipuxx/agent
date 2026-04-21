@@ -170,6 +170,34 @@ export interface UsageSummary {
   savings_vs_api_usd?: number | null;
 }
 
+export interface ChatThreadRecord {
+  id: string;
+  title: string;
+  status: string;
+  last_error?: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  thread_id: string;
+  role: string;
+  kind: string;
+  label: string;
+  body: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  latency_ms: number;
+  created_at: number;
+}
+
+export interface ChatBundle {
+  thread: ChatThreadRecord;
+  messages: ChatMessage[];
+}
+
 export interface AgentRecord {
   id: string;
   name: string;

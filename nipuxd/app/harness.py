@@ -39,8 +39,8 @@ from .db import (
     update_task_node,
 )
 from .event_bus import publish
+from .model_connection import resolve_model_connection
 from .model_client import chat_completion, parse_json_response
-from .runtime_manager import get_runtime_status, start_runtime
 
 
 _RUN_THREADS: dict[str, threading.Thread] = {}
@@ -58,49 +58,6 @@ def _workspace_for(agent_id: str) -> Path:
     path = root / agent_id
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def _resolve_model_connection(agent: dict[str, Any]) -> tuple[str, str, str]:
-    settings = get_app_settings()
-    runtime = get_runtime_status()
-    endpoint = ""
-    api_key = str(settings.get("openai_api_key") or "")
-    model = str(settings.get("openai_model") or "")
-
-    if runtime.get("model_loaded") and runtime.get("endpoint"):
-        endpoint = str(runtime["endpoint"])
-        health = runtime.get("health") or runtime.get("last_health") or {}
-        models = health.get("models") or []
-        if isinstance(models, list) and models:
-            first = models[0] or {}
-            model = str(first.get("id") or model or runtime.get("active_model_id") or "")
-        else:
-            model = str(runtime.get("active_model_id") or model)
-        api_key = api_key or "nipux-local"
-    elif settings.get("openai_base_url") and settings.get("openai_model"):
-        endpoint = str(settings["openai_base_url"])
-        model = str(settings["openai_model"])
-
-    if not endpoint or not model:
-        policy = agent.get("runtime_policy") or {}
-        model_policy = agent.get("model_policy") or {}
-        if policy.get("mode") != "external":
-            runtime = start_runtime(
-                runtime_id=policy.get("runtime_id") if policy.get("mode") not in {None, "auto"} else None,
-                model_id=model_policy.get("model_id") if model_policy.get("mode") not in {None, "auto"} else None,
-            )
-            endpoint = str(runtime.get("endpoint") or "")
-            health = runtime.get("health") or runtime.get("last_health") or {}
-            models = health.get("models") or []
-            if isinstance(models, list) and models:
-                model = str((models[0] or {}).get("id") or runtime.get("active_model_id") or "")
-            else:
-                model = str(runtime.get("active_model_id") or "")
-            api_key = api_key or "nipux-local"
-
-    if not endpoint or not model:
-        raise RuntimeError("No active model endpoint is configured. Start a runtime or set an external OpenAI-compatible endpoint in Settings.")
-    return endpoint, api_key, model
 
 
 def _session_metrics_update(session_id: str, usage: dict[str, int], latency_ms: float, tool_increment: int = 0) -> None:
@@ -348,7 +305,10 @@ def _execute_task(run_id: str, task_id: str, session_id: str, thread_id: str, ag
         if last_observation:
             context["last_observation"] = last_observation
 
-        endpoint, api_key, model = _resolve_model_connection(agent)
+        endpoint, api_key, model = resolve_model_connection(
+            runtime_policy=agent.get("runtime_policy"),
+            model_policy=agent.get("model_policy"),
+        )
         payload = _chat_json(
             endpoint=endpoint,
             api_key=api_key,
@@ -441,7 +401,10 @@ def _finalize_run(run_id: str, thread_id: str, session_id: str) -> None:
         agent = get_agent(run["agent_id"])
         if agent is not None:
             try:
-                endpoint, api_key, model = _resolve_model_connection(agent)
+                endpoint, api_key, model = resolve_model_connection(
+                    runtime_policy=agent.get("runtime_policy"),
+                    model_policy=agent.get("model_policy"),
+                )
                 response = chat_completion(
                     endpoint=endpoint,
                     api_key=api_key,

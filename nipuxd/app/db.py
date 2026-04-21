@@ -162,6 +162,30 @@ def init_db() -> None:
               FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE SET NULL
             );
 
+            CREATE TABLE IF NOT EXISTS chat_threads (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              status TEXT NOT NULL,
+              last_error TEXT,
+              created_at REAL NOT NULL,
+              updated_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS chat_messages (
+              id TEXT PRIMARY KEY,
+              thread_id TEXT NOT NULL,
+              role TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              label TEXT NOT NULL,
+              body TEXT NOT NULL,
+              prompt_tokens INTEGER NOT NULL DEFAULT 0,
+              completion_tokens INTEGER NOT NULL DEFAULT 0,
+              total_tokens INTEGER NOT NULL DEFAULT 0,
+              latency_ms REAL NOT NULL DEFAULT 0,
+              created_at REAL NOT NULL,
+              FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS events (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               stream_type TEXT NOT NULL,
@@ -255,6 +279,10 @@ def init_db() -> None:
               ON threads(agent_id, updated_at DESC);
             CREATE INDEX IF NOT EXISTS idx_messages_thread_created
               ON messages(thread_id, created_at ASC);
+            CREATE INDEX IF NOT EXISTS idx_chat_threads_updated
+              ON chat_threads(updated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_chat_messages_thread_created
+              ON chat_messages(thread_id, created_at ASC);
             CREATE INDEX IF NOT EXISTS idx_sessions_agent_started
               ON sessions(agent_id, started_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_stream
@@ -328,6 +356,8 @@ def _purge_legacy_demo_state(conn: sqlite3.Connection) -> None:
         "checkpoints",
         "task_nodes",
         "runs",
+        "chat_messages",
+        "chat_threads",
         "messages",
         "sessions",
         "threads",
@@ -711,6 +741,137 @@ def add_message(
     }
 
 
+def list_chat_threads() -> list[dict[str, Any]]:
+    conn = connect()
+    try:
+        rows = conn.execute("SELECT * FROM chat_threads ORDER BY updated_at DESC").fetchall()
+    finally:
+        conn.close()
+    return [_row_to_chat_thread(row) for row in rows]
+
+
+def get_chat_thread(thread_id: str) -> dict[str, Any] | None:
+    conn = connect()
+    try:
+        row = conn.execute("SELECT * FROM chat_threads WHERE id = ?", (thread_id,)).fetchone()
+    finally:
+        conn.close()
+    return _row_to_chat_thread(row) if row else None
+
+
+def create_chat_thread(title: str) -> dict[str, Any]:
+    thread_id = make_id("chat")
+    now = time.time()
+    conn = connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO chat_threads(id, title, status, last_error, created_at, updated_at)
+            VALUES (?, ?, 'idle', NULL, ?, ?)
+            """,
+            (thread_id, title, now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return get_chat_thread(thread_id) or {
+        "id": thread_id,
+        "title": title,
+        "status": "idle",
+        "last_error": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def update_chat_thread(thread_id: str, **fields: Any) -> dict[str, Any] | None:
+    allowed = {"title", "status", "last_error"}
+    sets = ["updated_at = ?"]
+    values: list[Any] = [time.time()]
+    for key, value in fields.items():
+        if key not in allowed:
+            continue
+        sets.append(f"{key} = ?")
+        values.append(value)
+    values.append(thread_id)
+    conn = connect()
+    try:
+        conn.execute(f"UPDATE chat_threads SET {', '.join(sets)} WHERE id = ?", values)
+        conn.commit()
+    finally:
+        conn.close()
+    return get_chat_thread(thread_id)
+
+
+def list_chat_messages(thread_id: str) -> list[dict[str, Any]]:
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC",
+            (thread_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [_row_to_chat_message(row) for row in rows]
+
+
+def add_chat_message(
+    thread_id: str,
+    role: str,
+    kind: str,
+    label: str,
+    body: str,
+    *,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    total_tokens: int = 0,
+    latency_ms: float = 0.0,
+) -> dict[str, Any]:
+    message_id = make_id("chatmsg")
+    now = time.time()
+    conn = connect()
+    try:
+        conn.execute(
+            """
+            INSERT INTO chat_messages(
+              id, thread_id, role, kind, label, body,
+              prompt_tokens, completion_tokens, total_tokens, latency_ms, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                message_id,
+                thread_id,
+                role,
+                kind,
+                label,
+                body,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                latency_ms,
+                now,
+            ),
+        )
+        conn.execute("UPDATE chat_threads SET updated_at = ? WHERE id = ?", (now, thread_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return {
+        "id": message_id,
+        "thread_id": thread_id,
+        "role": role,
+        "kind": kind,
+        "label": label,
+        "body": body,
+        "prompt_tokens": int(prompt_tokens),
+        "completion_tokens": int(completion_tokens),
+        "total_tokens": int(total_tokens),
+        "latency_ms": float(latency_ms),
+        "created_at": now,
+    }
+
+
 def create_session(
     thread_id: str,
     agent_id: str,
@@ -1031,7 +1192,7 @@ def list_recent_events(limit: int = 50) -> list[dict[str, Any]]:
 def get_usage_metrics() -> dict[str, Any]:
     conn = connect()
     try:
-        row = conn.execute(
+        session_row = conn.execute(
             """
             SELECT
               COUNT(*) AS total_sessions,
@@ -1044,16 +1205,27 @@ def get_usage_metrics() -> dict[str, Any]:
             FROM sessions
             """
         ).fetchone()
+        chat_row = conn.execute(
+            """
+            SELECT
+              COUNT(*) AS chat_messages,
+              COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+              COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+              COALESCE(SUM(total_tokens), 0) AS total_tokens
+            FROM chat_messages
+            """
+        ).fetchone()
     finally:
         conn.close()
     return {
-        "total_sessions": int(row["total_sessions"] or 0),
-        "active_sessions": int(row["active_sessions"] or 0),
-        "prompt_tokens": int(row["prompt_tokens"] or 0),
-        "completion_tokens": int(row["completion_tokens"] or 0),
-        "total_tokens": int(row["total_tokens"] or 0),
-        "tool_calls": int(row["tool_calls"] or 0),
-        "avg_tps": float(row["avg_tps"] or 0.0),
+        "total_sessions": int(session_row["total_sessions"] or 0),
+        "active_sessions": int(session_row["active_sessions"] or 0),
+        "prompt_tokens": int(session_row["prompt_tokens"] or 0) + int(chat_row["prompt_tokens"] or 0),
+        "completion_tokens": int(session_row["completion_tokens"] or 0) + int(chat_row["completion_tokens"] or 0),
+        "total_tokens": int(session_row["total_tokens"] or 0) + int(chat_row["total_tokens"] or 0),
+        "tool_calls": int(session_row["tool_calls"] or 0),
+        "chat_messages": int(chat_row["chat_messages"] or 0),
+        "avg_tps": float(session_row["avg_tps"] or 0.0),
     }
 
 
@@ -1542,6 +1714,33 @@ def _row_to_message(row: sqlite3.Row) -> dict[str, Any]:
         "kind": row["kind"],
         "label": row["label"],
         "body": row["body"],
+        "created_at": row["created_at"],
+    }
+
+
+def _row_to_chat_thread(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "status": row["status"],
+        "last_error": row["last_error"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def _row_to_chat_message(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "thread_id": row["thread_id"],
+        "role": row["role"],
+        "kind": row["kind"],
+        "label": row["label"],
+        "body": row["body"],
+        "prompt_tokens": int(row["prompt_tokens"] or 0),
+        "completion_tokens": int(row["completion_tokens"] or 0),
+        "total_tokens": int(row["total_tokens"] or 0),
+        "latency_ms": float(row["latency_ms"] or 0.0),
         "created_at": row["created_at"],
     }
 

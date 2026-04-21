@@ -19,6 +19,12 @@ from .agent_manager import (
     post_thread_message,
     update_agent_record,
 )
+from .chat_manager import (
+    create_chat_thread_record,
+    get_chat_bundle,
+    list_chat_thread_records,
+    post_chat_message,
+)
 from .browser_service import browser_command, get_browser_session, get_browser_view, get_frame_path
 from .db import (
     get_active_run_for_thread,
@@ -337,6 +343,40 @@ def thread_message(thread_id: str, payload: dict[str, Any] = Body(...)) -> dict[
 @app.get("/api/threads/{thread_id}/events")
 def thread_events(thread_id: str) -> StreamingResponse:
     return StreamingResponse(stream_sse(stream_type="thread", stream_id=thread_id), media_type="text/event-stream")
+
+
+@app.get("/api/chat/threads")
+def chat_threads() -> list[dict[str, Any]]:
+    return list_chat_thread_records()
+
+
+@app.post("/api/chat/threads")
+def chat_threads_create(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    return create_chat_thread_record(str(payload.get("title") or "").strip() or None)
+
+
+@app.get("/api/chat/threads/{thread_id}")
+def chat_thread_bundle(thread_id: str) -> dict[str, Any]:
+    bundle = get_chat_bundle(thread_id)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Unknown chat")
+    return bundle
+
+
+@app.post("/api/chat/threads/{thread_id}/messages")
+def chat_thread_message(thread_id: str, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    body = str(payload.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Missing message body")
+    try:
+        return post_chat_message(thread_id, body)
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/chat/threads/{thread_id}/events")
+def chat_thread_events(thread_id: str) -> StreamingResponse:
+    return StreamingResponse(stream_sse(stream_type="chat", stream_id=thread_id), media_type="text/event-stream")
 
 
 @app.get("/api/runs")
