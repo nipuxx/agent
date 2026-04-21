@@ -100,12 +100,10 @@ def _chat_messages_for_model(thread_id: str) -> list[dict[str, str]]:
                 "You are the direct Nipux model chat. This is not the agent harness. "
                 "Answer as a normal assistant, but use the provided Nipux system context when it is relevant. "
                 "If the user asks what the system is doing, ground the answer in that context. "
-                "Do not claim to have taken actions unless the context explicitly shows them."
+                "Do not claim to have taken actions unless the context explicitly shows them.\n\n"
+                "Nipux system context:\n"
+                + json.dumps(_system_context(), ensure_ascii=True)
             ),
-        },
-        {
-            "role": "system",
-            "content": "Nipux system context:\n" + json.dumps(_system_context(), ensure_ascii=True),
         },
     ]
     for item in history:
