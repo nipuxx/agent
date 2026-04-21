@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import threading
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ _LOCK = threading.RLock()
 _PLAYWRIGHT = None
 _BROWSER = None
 _RUNTIMES: dict[str, dict[str, Any]] = {}
+_TASKS: queue.Queue[tuple[Any, threading.Event, dict[str, Any]]] = queue.Queue()
+_WORKER: threading.Thread | None = None
 
 
 def _require_playwright():
@@ -43,19 +46,49 @@ def _require_playwright():
     return _PLAYWRIGHT, _BROWSER
 
 
-def _runtime_for(session_id: str) -> dict[str, Any]:
-    with _LOCK:
-        if session_id in _RUNTIMES:
-            return _RUNTIMES[session_id]
+def _browser_worker() -> None:
+    while True:
+        fn, done, box = _TASKS.get()
+        try:
+            box["result"] = fn()
+        except Exception as exc:  # pragma: no cover - cross-thread error transport
+            box["error"] = exc
+        finally:
+            done.set()
 
-        _, browser = _require_playwright()
-        settings = get_app_settings()
-        viewport = settings.get("browser_viewport") or {"width": 1280, "height": 800}
-        context = browser.new_context(viewport=viewport)
-        page = context.new_page()
-        runtime = {"context": context, "page": page}
-        _RUNTIMES[session_id] = runtime
-        return runtime
+
+def _ensure_worker() -> None:
+    global _WORKER
+    with _LOCK:
+        if _WORKER is not None and _WORKER.is_alive():
+            return
+        _WORKER = threading.Thread(target=_browser_worker, name="nipux-browser", daemon=True)
+        _WORKER.start()
+
+
+def _call_browser(fn):
+    _ensure_worker()
+    done = threading.Event()
+    box: dict[str, Any] = {}
+    _TASKS.put((fn, done, box))
+    done.wait()
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
+def _runtime_for(session_id: str) -> dict[str, Any]:
+    if session_id in _RUNTIMES:
+        return _RUNTIMES[session_id]
+
+    _, browser = _require_playwright()
+    settings = get_app_settings()
+    viewport = settings.get("browser_viewport") or {"width": 1280, "height": 800}
+    context = browser.new_context(viewport=viewport)
+    page = context.new_page()
+    runtime = {"context": context, "page": page}
+    _RUNTIMES[session_id] = runtime
+    return runtime
 
 
 def _frame_path(session_id: str) -> Path:
@@ -89,11 +122,14 @@ def _capture(page, session_id: str) -> dict[str, Any]:
 
 def ensure_browser_session(agent_id: str) -> dict[str, Any]:
     record = get_browser_session_by_agent(agent_id) or create_or_replace_browser_session(agent_id)
-    runtime = _runtime_for(record["id"])
-    if runtime["page"].url:
-        _capture(runtime["page"], record["id"])
-    else:
-        update_browser_session(record["id"], status="idle")
+    def _ensure() -> None:
+        runtime = _runtime_for(record["id"])
+        if runtime["page"].url:
+            _capture(runtime["page"], record["id"])
+        else:
+            update_browser_session(record["id"], status="idle")
+
+    _call_browser(_ensure)
     return get_browser_session(record["id"]) or record
 
 
@@ -112,8 +148,6 @@ def get_frame_path(session_id: str) -> Path | None:
 
 def browser_command(session_id: str, action: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = payload or {}
-    runtime = _runtime_for(session_id)
-    page = runtime["page"]
     session = get_browser_session(session_id)
     if session is None:
         raise RuntimeError("Unknown browser session.")
@@ -121,7 +155,10 @@ def browser_command(session_id: str, action: str, payload: dict[str, Any] | None
         raise RuntimeError("Browser is in manual mode.")
 
     publish("browser", session_id, "browser.command.started", {"action": action, "payload": payload})
-    try:
+
+    def _run() -> dict[str, Any]:
+        runtime = _runtime_for(session_id)
+        page = runtime["page"]
         if action == "navigate":
             url = str(payload.get("url") or "").strip()
             if not url:
@@ -159,8 +196,10 @@ def browser_command(session_id: str, action: str, payload: dict[str, Any] | None
             update_browser_session(session_id, control_mode="auto")
         elif action != "snapshot":
             raise RuntimeError(f"Unsupported browser action: {action}")
+        return _capture(page, session_id)
 
-        snapshot = _capture(page, session_id)
+    try:
+        snapshot = _call_browser(_run)
         publish("browser", session_id, "browser.command.completed", {"action": action, "url": snapshot["url"]})
         return {**(get_browser_session(session_id) or session), **snapshot}
     except Exception as exc:
@@ -179,12 +218,14 @@ def close_browser_session(agent_id: str) -> None:
     session = get_browser_session_by_agent(agent_id)
     if not session:
         return
-    with _LOCK:
+    def _close() -> None:
         runtime = _RUNTIMES.pop(session["id"], None)
-    if runtime:
-        try:
-            runtime["context"].close()
-        except Exception:
-            pass
+        if runtime:
+            try:
+                runtime["context"].close()
+            except Exception:
+                pass
+
+    _call_browser(_close)
     update_browser_session(session["id"], status="closed")
     publish("browser", session["id"], "browser.closed", {"agent_id": agent_id})
