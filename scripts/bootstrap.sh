@@ -60,9 +60,7 @@ if [ "$START_AFTER_INSTALL" = "1" ]; then
   pkill -f "next start --hostname" >/dev/null 2>&1 || true
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
   kill_listeners 9384 3000
-  nohup bash scripts/start.sh >"$LOG_PATH" 2>&1 &
-  sleep 5
-  if ! curl -fsS "http://127.0.0.1:9384/health" >/dev/null 2>&1; then
+  if ! bash scripts/start.sh 2>&1 | tee "$LOG_PATH"; then
     echo "Nipux did not come up cleanly. Check:"
     echo "  $LOG_PATH"
     exit 1
