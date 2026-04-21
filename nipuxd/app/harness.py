@@ -183,6 +183,46 @@ def _worker_messages(agent: dict[str, Any], context: dict[str, Any], tools: list
     ]
 
 
+def _chat_json(
+    *,
+    endpoint: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    session_id: str,
+    repair_hint: str,
+    retries: int = 1,
+) -> dict[str, Any]:
+    current_messages = list(messages)
+    last_error: Exception | None = None
+    for _ in range(retries + 1):
+        response = chat_completion(
+            endpoint=endpoint,
+            api_key=api_key,
+            model=model,
+            messages=current_messages,
+            max_tokens=max_tokens,
+        )
+        _session_metrics_update(session_id, response["usage"], response["latency_ms"])
+        try:
+            return parse_json_response(response["content"])
+        except Exception as exc:
+            last_error = exc
+            prior = str(response.get("content") or "").strip() or "(empty response)"
+            current_messages = list(messages) + [
+                {"role": "assistant", "content": prior[:4000]},
+                {
+                    "role": "user",
+                    "content": (
+                        f"{repair_hint}\n"
+                        "Return only valid JSON. No markdown fences. No prose. No explanation."
+                    ),
+                },
+            ]
+    raise RuntimeError(str(last_error or "Model did not return valid JSON."))
+
+
 def _final_response_messages(
     run: dict[str, Any],
     thread_id: str,
@@ -258,16 +298,20 @@ def _plan_run(run_id: str, session_id: str, agent: dict[str, Any]) -> None:
     if run is None:
         return
     endpoint, api_key, model = _resolve_model_connection(agent)
-    response = chat_completion(
-        endpoint=endpoint,
-        api_key=api_key,
-        model=model,
-        messages=_planner_messages(run, agent),
-        max_tokens=900,
-    )
-    _session_metrics_update(session_id, response["usage"], response["latency_ms"])
     try:
-        data = parse_json_response(response["content"])
+        data = _chat_json(
+            endpoint=endpoint,
+            api_key=api_key,
+            model=model,
+            messages=_planner_messages(run, agent),
+            max_tokens=1200,
+            session_id=session_id,
+            repair_hint=(
+                "Repair your previous planner output to the required schema: "
+                "{\"subtasks\":[{\"title\":\"...\",\"objective\":\"...\",\"success_criteria\":\"...\"}]}"
+            ),
+            retries=1,
+        )
         subtasks = data.get("subtasks") if isinstance(data.get("subtasks"), list) else []
     except Exception:
         subtasks = []
@@ -342,15 +386,19 @@ def _execute_task(run_id: str, task_id: str, session_id: str, thread_id: str, ag
             context["last_observation"] = last_observation
 
         endpoint, api_key, model = _resolve_model_connection(agent)
-        response = chat_completion(
+        payload = _chat_json(
             endpoint=endpoint,
             api_key=api_key,
             model=model,
             messages=_worker_messages(agent, context, tools),
-            max_tokens=1000,
+            max_tokens=1400,
+            session_id=session_id,
+            repair_hint=(
+                "Repair your previous worker output to the required schema: "
+                "{\"thought\":\"short\",\"assistant_message\":\"optional\",\"action\":{\"type\":\"...\",\"args\":{}},\"verification\":\"...\"}"
+            ),
+            retries=1,
         )
-        _session_metrics_update(session_id, response["usage"], response["latency_ms"])
-        payload = parse_json_response(response["content"])
         assistant_message = str(payload.get("assistant_message") or "").strip()
         action = payload.get("action") if isinstance(payload.get("action"), dict) else {}
         action_type = str(action.get("type") or "checkpoint").strip()
