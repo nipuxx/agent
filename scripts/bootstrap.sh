@@ -6,6 +6,7 @@ REPO_REF="${NIPUX_REPO_REF:-main}"
 INSTALL_DIR="${NIPUX_DIR:-$HOME/nipux}"
 START_AFTER_INSTALL="${NIPUX_START:-1}"
 LOG_PATH="${NIPUX_LOG_PATH:-/tmp/nipux-start.log}"
+START_TIMEOUT="${NIPUX_BOOTSTRAP_TIMEOUT:-90}"
 
 kill_listeners() {
   local port
@@ -60,13 +61,29 @@ if [ "$START_AFTER_INSTALL" = "1" ]; then
   pkill -f "next start --hostname" >/dev/null 2>&1 || true
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
   kill_listeners 9384 3000
-  if ! bash scripts/start.sh >"$LOG_PATH" 2>&1; then
-    cat "$LOG_PATH" || true
+  nohup bash -lc "cd \"$INSTALL_DIR\" && bash scripts/start.sh" >"$LOG_PATH" 2>&1 &
+  deadline=$((SECONDS + START_TIMEOUT))
+  api_ready=0
+  web_ready=0
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if [ "$api_ready" -eq 0 ] && curl -fsS "http://127.0.0.1:9384/health" >/dev/null 2>&1; then
+      api_ready=1
+    fi
+    if [ "$web_ready" -eq 0 ] && curl -I -fsS "http://127.0.0.1:3000/" >/dev/null 2>&1; then
+      web_ready=1
+    fi
+    if [ "$api_ready" -eq 1 ] && [ "$web_ready" -eq 1 ]; then
+      break
+    fi
+    sleep 1
+  done
+  if [ "$api_ready" -ne 1 ] || [ "$web_ready" -ne 1 ]; then
+    tail -n 120 "$LOG_PATH" || true
     echo "Nipux did not come up cleanly. Check:"
     echo "  $LOG_PATH"
     exit 1
   fi
-  cat "$LOG_PATH"
+  tail -n 120 "$LOG_PATH" || true
   echo
   echo "Nipux is up."
   echo "Open:"
