@@ -7,6 +7,19 @@ INSTALL_DIR="${NIPUX_DIR:-$HOME/nipux}"
 START_AFTER_INSTALL="${NIPUX_START:-1}"
 LOG_PATH="${NIPUX_LOG_PATH:-/tmp/nipux-start.log}"
 
+kill_listeners() {
+  local port
+  for port in "$@"; do
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill >/dev/null 2>&1 || true
+      sleep 1
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1 || true
+    elif command -v fuser >/dev/null 2>&1; then
+      fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 require_command() {
   local name="$1"
   if ! command -v "$name" >/dev/null 2>&1; then
@@ -46,6 +59,7 @@ if [ "$START_AFTER_INSTALL" = "1" ]; then
   pkill -f "$INSTALL_DIR/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
   pkill -f "next start --hostname" >/dev/null 2>&1 || true
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
+  kill_listeners 9384 3000
   nohup bash scripts/start.sh >"$LOG_PATH" 2>&1 &
   sleep 5
   if ! curl -fsS "http://127.0.0.1:9384/health" >/dev/null 2>&1; then

@@ -7,6 +7,19 @@ API_PORT="${NIPUX_API_PORT:-9384}"
 WEB_HOST="${NIPUX_WEB_HOST:-0.0.0.0}"
 WEB_PORT="${NIPUX_WEB_PORT:-3000}"
 
+kill_listeners() {
+  local port
+  for port in "$@"; do
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill >/dev/null 2>&1 || true
+      sleep 1
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1 || true
+    elif command -v fuser >/dev/null 2>&1; then
+      fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 stop_existing() {
   pkill -f "uvicorn nipuxd.app.main:app --app-dir $ROOT" >/dev/null 2>&1 || true
   pkill -f "$ROOT/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
@@ -14,6 +27,7 @@ stop_existing() {
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
   pkill -f "npm run dev" >/dev/null 2>&1 || true
   pkill -f "npm exec next start --hostname" >/dev/null 2>&1 || true
+  kill_listeners "$API_PORT" "$WEB_PORT"
   sleep 1
 }
 

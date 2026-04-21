@@ -3,12 +3,26 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+kill_listeners() {
+  local port
+  for port in "$@"; do
+    if command -v lsof >/dev/null 2>&1; then
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill >/dev/null 2>&1 || true
+      sleep 1
+      lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1 || true
+    elif command -v fuser >/dev/null 2>&1; then
+      fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
 stop_existing() {
   pkill -f "uvicorn nipuxd.app.main:app --app-dir $ROOT" >/dev/null 2>&1 || true
   pkill -f "$ROOT/web/node_modules/.bin/next start" >/dev/null 2>&1 || true
   pkill -f "$ROOT/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
   pkill -f "bash scripts/start.sh" >/dev/null 2>&1 || true
   pkill -f "npm exec next start --hostname" >/dev/null 2>&1 || true
+  kill_listeners 9384 3000
   sleep 1
 }
 
