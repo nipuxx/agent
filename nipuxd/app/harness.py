@@ -183,6 +183,36 @@ def _worker_messages(agent: dict[str, Any], context: dict[str, Any], tools: list
     ]
 
 
+def _final_response_messages(
+    run: dict[str, Any],
+    thread_id: str,
+    checkpoint_summary: str,
+    artifacts: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    recent_messages = list_messages(thread_id)[-8:]
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are the Nipux final responder. Produce the final user-facing answer only. "
+                "Do not mention the harness, planning, checkpoints, or internal tooling unless the user explicitly asked for them. "
+                "If the goal asks for exact wording, follow it exactly. "
+                "Prefer concrete output over explanation."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Original goal:\n{run['goal']}\n\n"
+                f"Latest accepted checkpoint:\n{checkpoint_summary}\n\n"
+                f"Recent artifacts:\n{artifacts[:6]}\n\n"
+                f"Recent thread messages:\n"
+                f"{[{'role': item['role'], 'label': item['label'], 'body': item['body'][:1000]} for item in recent_messages]}"
+            ),
+        },
+    ]
+
+
 def _terminal_exec(agent_id: str, command: str) -> dict[str, Any]:
     cwd = _workspace_for(agent_id)
     started = time.time()
@@ -392,13 +422,34 @@ def _execute_task(run_id: str, task_id: str, session_id: str, thread_id: str, ag
 
 
 def _finalize_run(run_id: str, thread_id: str, session_id: str) -> None:
+    run = get_run(run_id)
     checkpoint = get_latest_checkpoint(run_id)
     summary = checkpoint["summary"] if checkpoint else "Run completed."
-    add_message(thread_id, "assistant", "assistant", "Nipux", summary, session_id=session_id)
-    publish("thread", thread_id, "message.created", {"thread_id": thread_id, "label": "Nipux"})
+    final_text = summary
+    if run is not None:
+        agent = get_agent(run["agent_id"])
+        if agent is not None:
+            try:
+                endpoint, api_key, model = _resolve_model_connection(agent)
+                response = chat_completion(
+                    endpoint=endpoint,
+                    api_key=api_key,
+                    model=model,
+                    messages=_final_response_messages(run, thread_id, summary, list_artifacts(run_id)),
+                    temperature=0.1,
+                    max_tokens=700,
+                )
+                _session_metrics_update(session_id, response["usage"], response["latency_ms"])
+                candidate = str(response["content"] or "").strip()
+                if candidate:
+                    final_text = candidate
+            except Exception:
+                pass
+    add_message(thread_id, "assistant", "assistant", "Nipux", final_text, session_id=session_id)
+    publish("thread", thread_id, "message.created", {"thread_id": thread_id, "label": "Nipux", "body": final_text[:500]})
     update_run(run_id, status="completed", ended_at=time.time())
     close_session(session_id, status="completed")
-    publish("run", run_id, "run.completed", {"summary": summary})
+    publish("run", run_id, "run.completed", {"summary": final_text})
 
 
 def _run_loop(run_id: str, session_id: str, thread_id: str, agent_id: str, stop_event: threading.Event) -> None:
