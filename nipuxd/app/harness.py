@@ -297,56 +297,19 @@ def _plan_run(run_id: str, session_id: str, agent: dict[str, Any]) -> None:
     run = get_run(run_id)
     if run is None:
         return
-    endpoint, api_key, model = _resolve_model_connection(agent)
-    try:
-        data = _chat_json(
-            endpoint=endpoint,
-            api_key=api_key,
-            model=model,
-            messages=_planner_messages(run, agent),
-            max_tokens=1200,
-            session_id=session_id,
-            repair_hint=(
-                "Repair your previous planner output to the required schema: "
-                "{\"subtasks\":[{\"title\":\"...\",\"objective\":\"...\",\"success_criteria\":\"...\"}]}"
-            ),
-            retries=1,
-        )
-        subtasks = data.get("subtasks") if isinstance(data.get("subtasks"), list) else []
-    except Exception:
-        subtasks = []
-
     root = get_task_node(run["top_task_id"]) if run.get("top_task_id") else None
-    if not subtasks:
-        fallback = create_task_node(
-            run_id,
-            title="Primary task",
-            objective=run["goal"],
-            kind="task",
-            parent_id=root["id"] if root else None,
-            verifier={"type": "deliverable"},
-            assigned_agent_id=agent["id"],
-        )
-        publish("run", run_id, "run.planned", {"subtasks": 1, "fallback": True})
-        if root:
-            update_task_node(root["id"], status="in_progress")
-        return
-
-    for item in subtasks[:5]:
-        if not isinstance(item, dict):
-            continue
-        create_task_node(
-            run_id,
-            title=str(item.get("title") or "Subtask").strip()[:80],
-            objective=str(item.get("objective") or "").strip() or str(item.get("title") or "Subtask"),
-            kind="task",
-            parent_id=root["id"] if root else None,
-            verifier={"type": "criteria", "description": str(item.get("success_criteria") or "").strip()},
-            assigned_agent_id=agent["id"],
-        )
+    create_task_node(
+        run_id,
+        title="Primary task",
+        objective=run["goal"],
+        kind="task",
+        parent_id=root["id"] if root else None,
+        verifier={"type": "deliverable"},
+        assigned_agent_id=agent["id"],
+    )
     if root:
         update_task_node(root["id"], status="in_progress")
-    publish("run", run_id, "run.planned", {"subtasks": len(subtasks[:5]), "fallback": False})
+    publish("run", run_id, "run.planned", {"subtasks": 1, "fallback": True})
 
 
 def _complete_root_if_ready(run_id: str) -> bool:
