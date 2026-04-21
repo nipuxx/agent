@@ -30,6 +30,8 @@ stop_existing() {
   pkill -f "uvicorn nipuxd.app.main:app --app-dir $ROOT" >/dev/null 2>&1 || true
   pkill -f "$ROOT/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
   pkill -f "$ROOT/web/node_modules/.bin/next start" >/dev/null 2>&1 || true
+  pkill -f "next-server" >/dev/null 2>&1 || true
+  pkill -f "next start --hostname" >/dev/null 2>&1 || true
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
   pkill -f "npm run dev" >/dev/null 2>&1 || true
   pkill -f "npm exec next start --hostname" >/dev/null 2>&1 || true

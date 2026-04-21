@@ -58,6 +58,7 @@ if [ "$START_AFTER_INSTALL" = "1" ]; then
   echo "==> Starting Nipux"
   pkill -f "uvicorn nipuxd.app.main:app" >/dev/null 2>&1 || true
   pkill -f "$INSTALL_DIR/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
+  pkill -f "next-server" >/dev/null 2>&1 || true
   pkill -f "next start --hostname" >/dev/null 2>&1 || true
   pkill -f "bash scripts/dev.sh" >/dev/null 2>&1 || true
   kill_listeners 9384 3000
