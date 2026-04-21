@@ -3,6 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+stop_existing() {
+  pkill -f "uvicorn nipuxd.app.main:app --app-dir $ROOT" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/web/node_modules/.bin/next start" >/dev/null 2>&1 || true
+  pkill -f "$ROOT/web/node_modules/.bin/next dev" >/dev/null 2>&1 || true
+  pkill -f "bash scripts/start.sh" >/dev/null 2>&1 || true
+  pkill -f "npm exec next start --hostname" >/dev/null 2>&1 || true
+  sleep 1
+}
+
 if [ ! -d "$ROOT/.venv" ]; then
   echo "Missing Python environment. Run: bash scripts/install.sh"
   exit 1
@@ -13,6 +22,8 @@ if [ ! -d "$ROOT/web/node_modules" ]; then
   exit 1
 fi
 
+stop_existing
+
 cleanup() {
   if [ -n "${API_PID:-}" ] && kill -0 "$API_PID" >/dev/null 2>&1; then
     kill "$API_PID" >/dev/null 2>&1 || true
@@ -22,6 +33,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 source "$ROOT/.venv/bin/activate"
+export NODE_ENV=development
 python -m uvicorn nipuxd.app.main:app --app-dir "$ROOT" --host 0.0.0.0 --port 9384 &
 API_PID=$!
 
