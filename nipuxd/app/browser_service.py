@@ -151,8 +151,6 @@ def browser_command(session_id: str, action: str, payload: dict[str, Any] | None
     session = get_browser_session(session_id)
     if session is None:
         raise RuntimeError("Unknown browser session.")
-    if session["control_mode"] == "manual" and action not in {"resume", "snapshot"}:
-        raise RuntimeError("Browser is in manual mode.")
 
     publish("browser", session_id, "browser.command.started", {"action": action, "payload": payload})
 

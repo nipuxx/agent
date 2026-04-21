@@ -319,6 +319,7 @@ export interface SettingsUpdate {
   checkpoint_every_actions?: number;
   max_runtime_minutes?: number;
   browser_headless?: boolean;
+  browser_viewport?: { width: number; height: number };
   workspace_root?: string;
   allow_terminal?: boolean;
   allow_browser?: boolean;

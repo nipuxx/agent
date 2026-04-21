@@ -119,7 +119,7 @@ export function SetupView() {
             Setup is the only place that installs or starts a runtime.
           </div>
           <div className="nipux-mono uppercase tracking-[0.16em]">
-            Configure once, then work from Dashboard and Agents.
+            Configure once, then work from Dashboard, Chats, and Agents.
           </div>
         </footer>
       </div>

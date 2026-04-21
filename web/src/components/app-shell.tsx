@@ -3,12 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, PanelsTopLeft } from "lucide-react";
+import { LayoutGrid, MessagesSquare, PanelsTopLeft, Settings2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/chat", label: "Chats", icon: MessagesSquare },
   { href: "/agents", label: "Agents", icon: PanelsTopLeft },
 ];
 
@@ -30,8 +31,8 @@ function RailLink({
       className={cn(
         "flex h-10 w-10 items-center justify-center border text-[var(--muted-foreground)] transition-colors",
         active
-          ? "border-white/10 bg-white/[0.035] text-[var(--foreground)]"
-          : "border-transparent hover:border-white/10 hover:bg-white/[0.02] hover:text-[var(--foreground)]",
+          ? "border-white/10 bg-white/[0.035] text-[color:rgba(241,238,231,0.86)]"
+          : "border-transparent hover:border-white/10 hover:bg-white/[0.02] hover:text-[color:rgba(241,238,231,0.78)]",
       )}
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
@@ -43,7 +44,6 @@ export function AppShell({
   children,
 }: {
   children: ReactNode;
-  telemetry?: unknown;
 }) {
   const pathname = usePathname();
 
@@ -75,8 +75,15 @@ export function AppShell({
             ))}
           </nav>
 
-          <div className="flex items-center justify-center border-t border-[var(--border)] py-5">
-            <span className="h-2 w-2 bg-[var(--foreground)]/42" />
+          <div className="border-t border-[var(--border)] py-5">
+            <div className="flex items-center justify-center">
+              <RailLink
+                href="/settings"
+                active={pathname === "/settings"}
+                label="Settings"
+                icon={Settings2}
+              />
+            </div>
           </div>
         </aside>
 

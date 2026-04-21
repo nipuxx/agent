@@ -11,20 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-
-function SessionLine({ label, value }: { label: string; value: string }) {
+function panelLabel(label: string) {
   return (
-    <div className="grid grid-cols-[110px_minmax(0,1fr)] items-center border-b border-[var(--border)] py-3 last:border-b-0">
-      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-        {label}
-      </div>
-      <div className="nipux-mono break-all text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
-        {value}
-      </div>
+    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+      {label}
     </div>
   );
 }
-
 
 function MessageBlock({
   label,
@@ -36,7 +29,7 @@ function MessageBlock({
   kind: string;
 }) {
   return (
-    <div className={kind === "tool" ? "border border-[var(--border)] bg-white/[0.018] px-4 py-4" : "max-w-[880px]"}>
+    <div className={kind === "tool" ? "border border-[var(--border)] bg-white/[0.018] px-4 py-4" : "max-w-[920px]"}>
       <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
         {label}
       </div>
@@ -44,7 +37,7 @@ function MessageBlock({
         className={
           kind === "tool"
             ? "mt-2 whitespace-pre-wrap nipux-mono text-[12px] tracking-[0.04em] text-[var(--foreground)]/78"
-            : "mt-3 whitespace-pre-wrap text-[17px] leading-[1.75] text-[var(--foreground)]/92"
+            : "mt-3 whitespace-pre-wrap text-[16px] leading-[1.78] text-[var(--foreground)]/92"
         }
       >
         {body}
@@ -52,7 +45,6 @@ function MessageBlock({
     </div>
   );
 }
-
 
 export function ChatView() {
   const { summary, loading, error, refresh } = useLiveSummary();
@@ -84,18 +76,16 @@ export function ChatView() {
       .then((rows) => {
         if (!active) return;
         setThreads(rows);
-        if (!selectedThreadId && rows[0]) {
-          setSelectedThreadId(rows[0].id);
-        }
+        setSelectedThreadId((current) => (current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null));
       })
       .catch((err) => {
         if (!active) return;
-        setActionError(err instanceof Error ? err.message : "Failed to load threads.");
+        setActionError(err instanceof Error ? err.message : "Failed to load chats.");
       });
     return () => {
       active = false;
     };
-  }, [selectedAgentId, selectedThreadId]);
+  }, [selectedAgentId]);
 
   const { bundle } = useThreadBundle(selectedThreadId);
   const selectedAgent = useMemo(
@@ -127,7 +117,7 @@ export function ChatView() {
     };
   }, [activeRun?.id, bundle?.messages.length]);
 
-  async function handleNewThread() {
+  async function handleNewChat() {
     if (!selectedAgentId) return;
     setPending(true);
     setActionError(null);
@@ -137,7 +127,7 @@ export function ChatView() {
       setThreads(nextThreads);
       setSelectedThreadId(thread.id);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to create thread.");
+      setActionError(err instanceof Error ? err.message : "Failed to create chat.");
     } finally {
       setPending(false);
     }
@@ -164,7 +154,7 @@ export function ChatView() {
     return (
       <AppShell>
         <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-          Loading console...
+          Loading chats...
         </div>
       </AppShell>
     );
@@ -174,25 +164,23 @@ export function ChatView() {
     return (
       <AppShell>
         <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
-          {error ?? "Console is unavailable."}
+          {error ?? "Chats are unavailable."}
         </div>
       </AppShell>
     );
   }
 
   return (
-    <AppShell telemetry={summary.telemetry}>
-      <section className="grid min-h-[calc(100vh-52px)] xl:grid-cols-[260px_minmax(0,1fr)_340px]">
-        <aside className="border-r border-[var(--border)]">
+    <AppShell>
+      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_400px]">
+        <aside className="min-h-0 border-r border-[var(--border)]">
           <div className="border-b border-[var(--border)] px-5 py-5">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              agent_console
-            </div>
-            <div className="mt-4 flex gap-2">
+            {panelLabel("chats")}
+            <div className="mt-4 grid gap-3">
               <select
                 value={selectedAgentId ?? ""}
                 onChange={(event) => setSelectedAgentId(event.target.value)}
-                className="w-full border border-[var(--border)] bg-transparent px-3 py-2 text-[14px] text-[var(--foreground)] outline-none"
+                className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
               >
                 {agents.map((agent) => (
                   <option key={agent.id} value={agent.id} className="bg-[var(--background)]">
@@ -200,35 +188,37 @@ export function ChatView() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="mt-4">
-              <Button size="sm" onClick={() => void handleNewThread()} disabled={pending || !selectedAgentId}>
-                New thread
+              <Button size="sm" onClick={() => void handleNewChat()} disabled={pending || !selectedAgentId}>
+                New chat
               </Button>
             </div>
           </div>
 
-          <div className="px-3 py-3">
-            {threads.map((thread) => {
-              const active = thread.id === selectedThreadId;
-              return (
-                <button
-                  key={thread.id}
-                  type="button"
-                  onClick={() => setSelectedThreadId(thread.id)}
-                  className={`flex w-full items-center justify-between border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
-                    active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
-                  }`}
-                >
-                  <div>
+          <div className="min-h-0 overflow-auto px-3 py-3">
+            {threads.length ? (
+              threads.map((thread) => {
+                const active = thread.id === selectedThreadId;
+                return (
+                  <button
+                    key={thread.id}
+                    type="button"
+                    onClick={() => setSelectedThreadId(thread.id)}
+                    className={`w-full border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
+                      active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                    }`}
+                  >
                     <div className="text-[15px] text-[var(--foreground)]">{thread.title}</div>
                     <div className="mt-2 nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
                       {thread.status}
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-3 py-4 text-[14px] leading-[1.7] text-[var(--muted-foreground)]">
+                No chats yet. Create one and assign work to the selected agent.
+              </div>
+            )}
           </div>
         </aside>
 
@@ -236,16 +226,14 @@ export function ChatView() {
           <header className="border-b border-[var(--border)] px-5 py-5 md:px-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="nipux-mono text-[11px] uppercase tracking-[0.22em] text-[var(--muted-foreground)]">
-                  session_console
-                </div>
-                <h1 className="mt-3 text-[42px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
-                  {bundle?.thread.title ?? "No thread selected"}
+                {panelLabel("conversation")}
+                <h1 className="mt-3 text-[34px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                  {bundle?.thread.title ?? "No chat selected"}
                 </h1>
               </div>
               <div className="flex gap-2">
                 <Badge variant={selectedAgent?.status === "running" ? "success" : "secondary"}>
-                  {selectedAgent?.status === "running" ? "Agent live" : "Agent idle"}
+                  {selectedAgent?.status === "running" ? "agent live" : "agent idle"}
                 </Badge>
                 {activeRun ? <Badge variant="secondary">{activeRun.status}</Badge> : null}
               </div>
@@ -255,55 +243,48 @@ export function ChatView() {
 
           <div className="flex-1 overflow-auto px-5 py-6 md:px-8 md:py-8">
             <div className="space-y-8">
-              {bundle?.messages.map((item) => (
-                <MessageBlock key={item.id} label={item.label} body={item.body} kind={item.kind} />
-              )) ?? null}
+              {bundle?.messages.length ? (
+                bundle.messages.map((item) => (
+                  <MessageBlock key={item.id} label={item.label} body={item.body} kind={item.kind} />
+                ))
+              ) : (
+                <div className="text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
+                  Start a chat and give the agent a concrete task.
+                </div>
+              )}
             </div>
           </div>
 
           <footer className="border-t border-[var(--border)] px-5 py-5 md:px-8">
-            <div className="grid gap-4">
+            <div className="grid gap-3">
               <Input
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Assign work to the selected agent..."
+                placeholder="Tell the selected agent what to do..."
                 disabled={!selectedThreadId || pending}
               />
-              <div className="flex flex-wrap items-center gap-2">
-                {(selectedAgent?.toolsets ?? []).map((tool) => (
-                  <Badge key={tool} variant="secondary">
-                    {tool}
-                  </Badge>
-                ))}
-                <div className="ml-auto">
-                  <Button size="sm" onClick={() => void handleSend()} disabled={!selectedThreadId || pending || !message.trim()}>
-                    Send
-                  </Button>
-                </div>
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => void handleSend()} disabled={!selectedThreadId || pending || !message.trim()}>
+                  Send
+                </Button>
               </div>
             </div>
           </footer>
         </div>
 
-        <aside className="grid grid-rows-[auto_minmax(0,1fr)]">
+        <aside className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
           <div className="border-b border-[var(--border)] px-5 py-5">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              session_state
-            </div>
-            <div className="mt-4">
-              <SessionLine label="Agent" value={selectedAgent?.name ?? "UNBOUND"} />
-              <SessionLine label="Run" value={activeRun?.status?.toUpperCase() ?? "IDLE"} />
-              <SessionLine label="Tasks" value={String(runDetail?.taskCount ?? 0)} />
-              <SessionLine label="Runtime" value={summary.runtime_state.runtime_id?.toUpperCase() ?? "AUTO"} />
-              <SessionLine
-                label="Endpoint"
-                value={summary.runtime_state.endpoint ?? summary.settings.openai_base_url ?? "UNBOUND"}
-              />
+            {panelLabel("session")}
+            <div className="mt-4 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+              <div>Agent: {selectedAgent?.name ?? "None"}</div>
+              <div>Run: {runDetail?.status ?? activeRun?.status ?? "idle"}</div>
+              <div>Tasks: {String(runDetail?.taskCount ?? 0)}</div>
+              <div>Endpoint: {summary.runtime_state.endpoint ?? summary.settings.openai_base_url ?? "Not configured"}</div>
             </div>
           </div>
 
           <div className="min-h-0">
-            <BrowserPane agentId={selectedAgent?.id} title="browser" />
+            <BrowserPane agentId={selectedAgent?.id} title="browser" compact />
           </div>
         </aside>
       </section>

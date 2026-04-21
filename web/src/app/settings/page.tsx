@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { SettingsView } from "@/components/settings-view";
 
 export default function SettingsPage() {
-  redirect("/setup");
+  return <SettingsView />;
 }

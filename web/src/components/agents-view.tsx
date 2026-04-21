@@ -4,27 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
 import { BrowserPane } from "./browser-pane";
-import { createAgent, startAgent, stopAgent, updateAgent } from "@/lib/api";
+import { createAgent, deleteAgent, startAgent, stopAgent, updateAgent } from "@/lib/api";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-
-function DetailRow({ label, value }: { label: string; value: string }) {
+function panelLabel(label: string) {
   return (
-    <div className="grid grid-cols-[120px_minmax(0,1fr)] border-b border-[var(--border)] py-3 last:border-b-0">
-      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-        {label}
-      </div>
-      <div className="nipux-mono break-all text-[12px] uppercase tracking-[0.08em] text-[var(--foreground)]">
-        {value}
-      </div>
+    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+      {label}
     </div>
   );
 }
 
+function statusVariant(status: string) {
+  return status === "running" ? "success" : "secondary";
+}
 
 export function AgentsView() {
   const { summary, loading, error, refresh } = useLiveSummary();
@@ -32,7 +29,6 @@ export function AgentsView() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [toolsets, setToolsets] = useState("");
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -55,11 +51,13 @@ export function AgentsView() {
     setName(selectedAgent.name);
     setDescription(selectedAgent.description);
     setSystemPrompt(selectedAgent.system_prompt);
-    setToolsets(selectedAgent.toolsets.join(", "));
   }, [selectedAgent]);
 
   const selectedRun = useMemo(
-    () => runs.find((run) => run.agent_id === selectedAgent?.id && ["queued", "planning", "running", "paused"].includes(run.status)) ?? null,
+    () =>
+      runs.find(
+        (run) => run.agent_id === selectedAgent?.id && ["queued", "planning", "running", "paused"].includes(run.status),
+      ) ?? null,
     [runs, selectedAgent?.id],
   );
 
@@ -72,7 +70,6 @@ export function AgentsView() {
         name,
         description,
         system_prompt: systemPrompt,
-        toolsets: toolsets.split(",").map((item) => item.trim()).filter(Boolean),
       });
       await refresh();
     } catch (err) {
@@ -90,7 +87,6 @@ export function AgentsView() {
         name: "New Agent",
         description: "Custom long-running Nipux worker.",
         system_prompt: "Work deliberately, verify progress, and checkpoint before claiming success.",
-        toolsets: ["browser", "terminal", "file", "clarify"],
       });
       setSelectedId(created.id);
       await refresh();
@@ -119,6 +115,21 @@ export function AgentsView() {
     }
   }
 
+  async function handleDelete() {
+    if (!selectedAgent) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      await deleteAgent(selectedAgent.id);
+      setSelectedId(null);
+      await refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to delete agent.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   if (loading && !summary) {
     return (
       <AppShell>
@@ -140,72 +151,79 @@ export function AgentsView() {
   }
 
   return (
-    <AppShell telemetry={summary.telemetry}>
-      <section className="grid min-h-[calc(100vh-52px)] xl:grid-cols-[300px_minmax(0,1fr)_360px]">
-        <aside className="border-r border-[var(--border)]">
+    <AppShell>
+      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_520px]">
+        <aside className="min-h-0 border-r border-[var(--border)]">
           <div className="border-b border-[var(--border)] px-5 py-5">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              agents
-            </div>
-            <h1 className="mt-3 text-[42px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
-              Agent fabric
-            </h1>
-            <div className="mt-4">
+            {panelLabel("agents")}
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <div className="text-[24px] font-medium tracking-[-0.05em] text-[var(--foreground)]">Workers</div>
               <Button size="sm" onClick={() => void handleCreate()} disabled={pending}>
-                Create agent
+                New
               </Button>
             </div>
           </div>
 
-          <div className="px-3 py-3">
-            {agents.map((agent) => {
-              const active = agent.id === selectedAgent?.id;
-              return (
-                <button
-                  key={agent.id}
-                  type="button"
-                  onClick={() => setSelectedId(agent.id)}
-                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
-                    active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
-                  }`}
-                >
-                  <div>
-                    <div className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                      {agent.id}
+          <div className="min-h-0 overflow-auto px-3 py-3">
+            {agents.length ? (
+              agents.map((agent) => {
+                const active = agent.id === selectedAgent?.id;
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    onClick={() => setSelectedId(agent.id)}
+                    className={`w-full border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
+                      active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[18px] font-medium tracking-[-0.04em] text-[var(--foreground)]">
+                          {agent.name}
+                        </div>
+                        <div className="mt-2 text-[13px] leading-[1.6] text-[var(--muted-foreground)]">
+                          {agent.description || "No summary yet."}
+                        </div>
+                      </div>
+                      <Badge variant={statusVariant(agent.status)}>{agent.status}</Badge>
                     </div>
-                    <div className="mt-2 text-[22px] font-medium tracking-[-0.04em] text-[var(--foreground)]">
-                      {agent.name}
-                    </div>
-                  </div>
-                  <Badge variant={agent.status === "running" ? "success" : "secondary"}>{agent.status}</Badge>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-3 py-4 text-[14px] leading-[1.7] text-[var(--muted-foreground)]">
+                No agents yet. Create one here, then use Chats to assign work.
+              </div>
+            )}
           </div>
         </aside>
 
-        <main className="border-r border-[var(--border)]">
-          <div className="border-b border-[var(--border)] px-6 py-5 md:px-8">
+        <main className="min-h-0 overflow-auto border-r border-[var(--border)]">
+          <header className="border-b border-[var(--border)] px-6 py-5 md:px-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-                  selected_agent
-                </div>
-                <h2 className="mt-3 text-[48px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                {panelLabel("selected agent")}
+                <h1 className="mt-3 text-[34px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
                   {selectedAgent?.name ?? "No agent"}
-                </h2>
+                </h1>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => void handleSave()} disabled={pending || !selectedAgent}>
-                  Save
-                </Button>
-                <Button size="sm" onClick={() => void handleToggle()} disabled={pending || !selectedAgent}>
-                  {selectedAgent?.status === "running" ? "Stop agent" : "Start agent"}
-                </Button>
-              </div>
+              {selectedAgent ? (
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => void handleSave()} disabled={pending}>
+                    Save
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => void handleDelete()} disabled={pending}>
+                    Delete
+                  </Button>
+                  <Button size="sm" onClick={() => void handleToggle()} disabled={pending}>
+                    {selectedAgent.status === "running" ? "Stop" : "Start"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
             {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
-          </div>
+          </header>
 
           <div className="grid gap-5 px-6 py-5 md:px-8">
             <div className="grid gap-2">
@@ -214,51 +232,43 @@ export function AgentsView() {
               </label>
               <Input value={name} onChange={(event) => setName(event.target.value)} disabled={!selectedAgent} />
             </div>
+
             <div className="grid gap-2">
               <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                Description
+                Summary
               </label>
-              <Textarea value={description} onChange={(event) => setDescription(event.target.value)} disabled={!selectedAgent} />
+              <Textarea value={description} onChange={(event) => setDescription(event.target.value)} disabled={!selectedAgent} className="min-h-[100px]" />
             </div>
+
             <div className="grid gap-2">
               <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
                 System prompt
               </label>
-              <Textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} disabled={!selectedAgent} className="min-h-[160px]" />
+              <Textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} disabled={!selectedAgent} className="min-h-[220px]" />
             </div>
-            <div className="grid gap-2">
-              <label className="nipux-mono text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                Toolsets
-              </label>
-              <Input value={toolsets} onChange={(event) => setToolsets(event.target.value)} disabled={!selectedAgent} />
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("live state")}
+                <div className="mt-3 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  <div>Status: {selectedAgent?.status ?? "idle"}</div>
+                  <div>Run: {selectedRun?.status ?? "idle"}</div>
+                  <div>Runtime: {summary.runtime_state.runtime_id ?? "auto"}</div>
+                </div>
+              </div>
+
+              <div className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("current work")}
+                <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  {selectedRun?.goal || selectedAgent?.description || "No active work summary yet."}
+                </div>
+              </div>
             </div>
-            <BrowserPane agentId={selectedAgent?.id} title="browser" />
           </div>
         </main>
 
-        <aside className="grid">
-          <div className="border-b border-[var(--border)] px-5 py-5">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              live_state
-            </div>
-            <div className="mt-4">
-              <DetailRow label="Status" value={selectedAgent?.status?.toUpperCase() ?? "IDLE"} />
-              <DetailRow label="Run" value={selectedRun?.status?.toUpperCase() ?? "IDLE"} />
-              <DetailRow label="Runtime" value={summary.runtime_state.runtime_id?.toUpperCase() ?? "AUTO"} />
-              <DetailRow label="Browser" value={selectedAgent ? "READY" : "UNBOUND"} />
-            </div>
-          </div>
-
-          <div className="px-5 py-5">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.2em] text-[var(--muted-foreground)]">
-              policy
-            </div>
-            <div className="mt-4">
-              <DetailRow label="Tools" value={(selectedAgent?.toolsets ?? []).join(",") || "NONE"} />
-              <DetailRow label="Prompt" value={selectedAgent?.system_prompt ? "CUSTOM" : "DEFAULT"} />
-              <DetailRow label="Workspace" value={summary.settings.workspace_root} />
-            </div>
-          </div>
+        <aside className="min-h-0 overflow-hidden">
+          <BrowserPane agentId={selectedAgent?.id} title="browser" />
         </aside>
       </section>
     </AppShell>

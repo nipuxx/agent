@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, Teko } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
 import "./globals.css";
 
-const displayFace = Teko({
+const displayFace = IBM_Plex_Sans_Condensed({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
