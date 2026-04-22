@@ -37,6 +37,9 @@ DEFAULT_PORTS = {
     "vllm": 8000,
     "llama.cpp": 8015,
 }
+LLAMA_CPP_DEFAULT_CTX = 8192
+LLAMA_CPP_DEFAULT_PARALLEL = 1
+LLAMA_CPP_DEFAULT_CACHE_RAM_MB = 512
 
 
 class RuntimeAdapter:
@@ -156,9 +159,11 @@ class LlamaCppAdapter(RuntimeAdapter):
                 "--port",
                 str(port),
                 "--parallel",
-                "1",
+                str(LLAMA_CPP_DEFAULT_PARALLEL),
+                "--ctx-size",
+                str(LLAMA_CPP_DEFAULT_CTX),
                 "--cache-ram",
-                "512",
+                str(LLAMA_CPP_DEFAULT_CACHE_RAM_MB),
             ]
             if device_args:
                 command.extend(["--flash-attn", "on", "--gpu-layers", "all", *device_args])
@@ -222,7 +227,7 @@ def _llama_server_device_args(server_bin: str) -> list[str]:
         return (discrete, -free_mib)
 
     ordered = [device_id for device_id, _ in sorted(devices, key=priority)]
-    return ["--device", ",".join(ordered)]
+    return ["--device", ordered[0]]
 
 
 def _find_model(model_id: str | None) -> dict[str, Any] | None:
