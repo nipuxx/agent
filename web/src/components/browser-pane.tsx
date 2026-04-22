@@ -12,10 +12,12 @@ export function BrowserPane({
   agentId,
   title = "browser",
   compact = false,
+  showControls = true,
 }: {
   agentId: string | null | undefined;
   title?: string;
   compact?: boolean;
+  showControls?: boolean;
 }) {
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [url, setUrl] = useState("");
@@ -112,7 +114,11 @@ export function BrowserPane({
   }
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] border border-[var(--border)]">
+    <div
+      className={`grid h-full min-h-0 min-w-0 border border-[var(--border)] ${
+        showControls ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]" : "grid-rows-[auto_minmax(0,1fr)_auto]"
+      }`}
+    >
       <div className="border-b border-[var(--border)] px-4 py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
@@ -122,7 +128,10 @@ export function BrowserPane({
             {session?.control_mode === "manual" ? "manual" : "agent"}
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-[minmax(0,1fr)_56px] gap-2">
+      </div>
+
+      {showControls ? (
+        <div className="grid grid-cols-[minmax(0,1fr)_56px] gap-2 border-b border-[var(--border)] px-4 py-3">
           <Input
             value={url}
             onChange={(event) => setUrl(event.target.value)}
@@ -133,24 +142,7 @@ export function BrowserPane({
             Go
           </Button>
         </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 border-b border-[var(--border)] px-4 py-3">
-        <Button variant="outline" size="sm" onClick={() => void act({ action: "back" })} disabled={!session || pending}>
-          Back
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void act({ action: "snapshot" })} disabled={!session || pending}>
-          Refresh
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void act({ action: session?.control_mode === "manual" ? "resume" : "pause" })}
-          disabled={!session || pending}
-        >
-          {session?.control_mode === "manual" ? "Resume" : "Control"}
-        </Button>
-      </div>
+      ) : null}
 
       <div className={`min-h-0 bg-black/20 ${compact ? "min-h-[340px]" : "min-h-[460px]"}`}>
         {frameSrc ? (
@@ -170,10 +162,33 @@ export function BrowserPane({
       </div>
 
       <div className="border-t border-[var(--border)] px-4 py-3">
-        <div className="text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
-        <div className="mt-2 truncate nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-          {session?.current_url && session.current_url !== "about:blank" ? session.current_url : "NO_URL"}
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
+          {!showControls ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void act({ action: session?.control_mode === "manual" ? "resume" : "pause" })}
+              disabled={!session || pending}
+            >
+              {session?.control_mode === "manual" ? "Resume agent" : "Take control"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void act({ action: session?.control_mode === "manual" ? "resume" : "pause" })}
+              disabled={!session || pending}
+            >
+              {session?.control_mode === "manual" ? "Resume" : "Control"}
+            </Button>
+          )}
         </div>
+        {showControls ? (
+          <div className="mt-2 truncate nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+            {session?.current_url && session.current_url !== "about:blank" ? session.current_url : "NO_URL"}
+          </div>
+        ) : null}
         {session?.control_mode === "manual" ? (
           <div className="mt-2 text-[12px] text-[var(--muted-foreground)]">
             Manual control is active. Click inside the browser frame to drive it.

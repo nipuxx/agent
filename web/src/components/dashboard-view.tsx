@@ -55,10 +55,15 @@ export function DashboardView() {
     [summary?.runs],
   );
 
+  const tokenSavings = useMemo(
+    () => Number(summary?.usage_summary.savings_vs_api_usd ?? 0),
+    [summary?.usage_summary.savings_vs_api_usd],
+  );
+
   if (loading && !summary) {
     return (
       <AppShell>
-        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+        <div className="flex h-screen items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
           Booting Nipux...
         </div>
       </AppShell>
@@ -68,7 +73,7 @@ export function DashboardView() {
   if (!summary) {
     return (
       <AppShell>
-        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+        <div className="flex h-screen items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
           {error ?? "Dashboard unavailable."}
         </div>
       </AppShell>
@@ -78,7 +83,7 @@ export function DashboardView() {
   if (!isSetupComplete(summary.settings)) {
     return (
       <AppShell>
-        <div className="flex h-[calc(100vh-52px)] items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
+        <div className="flex h-screen items-center justify-center px-6 text-[14px] text-[var(--muted-foreground)]">
           Opening setup…
         </div>
       </AppShell>
@@ -87,9 +92,9 @@ export function DashboardView() {
 
   return (
     <AppShell>
-      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
         <main className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] border-r border-[var(--border)]">
-          <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
+          <header className="border-b border-[var(--border)] bg-[linear-gradient(90deg,rgba(138,189,110,0.08),transparent_34%)] px-5 py-5 md:px-6">
             {panelLabel("dashboard")}
             <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -100,13 +105,10 @@ export function DashboardView() {
                   Watch live token flow, active runs, and the agents currently working on this host.
                 </p>
               </div>
-              <Badge variant={summary.runtime_state.model_loaded ? "success" : "secondary"}>
-                {summary.runtime_state.model_loaded ? "model live" : "runtime idle"}
-              </Badge>
             </div>
           </header>
 
-          <div className="grid gap-px bg-[var(--border)] md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-px bg-[var(--border)] md:grid-cols-4 xl:grid-cols-7">
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
               <Stat label="Active agents" value={String(activeNodes.length)} />
             </div>
@@ -124,6 +126,9 @@ export function DashboardView() {
             </div>
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
               <Stat label="Throughput" value={`${summary.telemetry.total_throughput_tps.toFixed(1)} tok/s`} />
+            </div>
+            <div className="bg-[var(--background)] px-5 py-5 md:px-6">
+              <Stat label="Money saved" value={`$${tokenSavings.toFixed(2)}`} />
             </div>
           </div>
 
@@ -183,22 +188,22 @@ export function DashboardView() {
 
               <aside className="space-y-5">
                 <div className="border border-[var(--border)] px-4 py-4">
-                  {panelLabel("runtime")}
+                  {panelLabel("memory")}
                   <div className="mt-4 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-                    <div>Mode: {summary.settings.provider_mode === "external" ? "External endpoint" : "Local runtime"}</div>
-                    <div>Runtime: {summary.runtime_state.runtime_id || summary.runtime_plan.runtime.label}</div>
-                    <div>Model: {summary.runtime_state.active_model_id || summary.settings.openai_model || "None"}</div>
+                    <div>Model RSS: {summary.telemetry.model_process_rss_gb?.toFixed(1) ?? "0.0"} GB</div>
+                    <div>Model VMS: {summary.telemetry.model_process_vms_gb?.toFixed(1) ?? "0.0"} GB</div>
                     <div>Host RAM: {summary.telemetry.ram_used_gb.toFixed(1)} / {summary.telemetry.ram_total_gb.toFixed(1)} GB</div>
+                    <div>Model: {summary.runtime_state.active_model_id || summary.settings.openai_model || "None"}</div>
                   </div>
                 </div>
 
                 <div className="border border-[var(--border)] px-4 py-4">
-                  {panelLabel("host")}
+                  {panelLabel("api benchmark")}
                   <div className="mt-4 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-                    <div>{summary.system.hostname}</div>
-                    <div>{summary.system.platform}</div>
+                    <div>Prompt: $0.06 / 1M</div>
+                    <div>Completion: $0.18 / 1M</div>
+                    <div>Host: {summary.system.hostname}</div>
                     <div>{summary.system.gpus.length ? `${summary.system.gpus.length} GPU(s)` : "CPU only"}</div>
-                    <div>Workspace: {summary.settings.workspace_root}</div>
                   </div>
                 </div>
               </aside>
@@ -212,9 +217,24 @@ export function DashboardView() {
               {panelLabel("system log")}
               <Badge variant="secondary">{String(summary.log_lines.length)} lines</Badge>
             </div>
-            <div className="mt-4 space-y-3 nipux-mono text-[12px] leading-[1.8] text-[var(--foreground)]/78">
+            <div className="mt-4 space-y-2 nipux-mono text-[12px] leading-[1.8]">
               {summary.log_lines.length ? (
-                summary.log_lines.slice(-18).map((line, index) => <div key={`${line}-${index}`}>{line}</div>)
+                summary.log_lines.slice(-18).map((line) => (
+                  <div
+                    key={line.id}
+                    className={
+                      line.level === "error"
+                        ? "text-[#d8a499]"
+                        : line.event_type.startsWith("message.")
+                          ? "text-[#9dc1ff]"
+                          : line.event_type.startsWith("agent.")
+                            ? "text-[#8abd6e]"
+                            : "text-[var(--foreground)]/78"
+                    }
+                  >
+                    {line.line}
+                  </div>
+                ))
               ) : (
                 <div className="text-[var(--muted-foreground)]">No runtime activity yet.</div>
               )}

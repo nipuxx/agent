@@ -647,9 +647,11 @@ export function RuntimeSetupPanel({
                   <div>
                     {panelLabel("install log")}
                     <div className="mt-3 space-y-2 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/78">
-                      {(installLogs.length ? installLogs.slice(-10) : summary.log_lines.slice(-10)).map((line, index) => (
-                        <div key={`${line}-${index}`}>{line}</div>
-                      ))}
+                      {(installLogs.length ? installLogs.slice(-10) : summary.log_lines.slice(-10).map((line) => line.line)).map(
+                        (line, index) => (
+                          <div key={`${line}-${index}`}>{line}</div>
+                        ),
+                      )}
                       {!installLogs.length && !summary.log_lines.length ? (
                         <div className="text-[var(--muted-foreground)]">No log output yet.</div>
                       ) : null}

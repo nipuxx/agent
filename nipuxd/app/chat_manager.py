@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Iterable
 
 from .agent_manager import list_agent_records
 from .db import (
@@ -18,7 +18,7 @@ from .db import (
 )
 from .detection import detect_system
 from .event_bus import publish
-from .model_client import chat_completion
+from .model_client import chat_completion, stream_chat_completion
 from .model_connection import resolve_model_connection
 
 
@@ -184,3 +184,66 @@ def post_chat_message(thread_id: str, body: str) -> dict[str, Any]:
         },
     )
     return assistant_message
+
+
+def stream_chat_message(thread_id: str, body: str) -> Iterable[dict[str, Any]]:
+    thread = get_chat_thread(thread_id)
+    if thread is None:
+        raise RuntimeError("Unknown chat.")
+    if not body.strip():
+        raise RuntimeError("Message body cannot be empty.")
+
+    if not thread["title"] or thread["title"].startswith("New "):
+        update_chat_thread(thread_id, title=_chat_title(body))
+
+    update_chat_thread(thread_id, status="running", last_error=None)
+    user_message = add_chat_message(thread_id, "user", "user", "user", body)
+    publish("chat", thread_id, "message.created", user_message)
+    yield {"type": "user", "message": user_message}
+
+    try:
+        endpoint, api_key, model = resolve_model_connection()
+        content_parts: list[str] = []
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        latency_ms = 0.0
+        for item in stream_chat_completion(
+            endpoint=endpoint,
+            api_key=api_key,
+            model=model,
+            messages=_chat_messages_for_model(thread_id),
+            temperature=0.3,
+            max_tokens=1400,
+        ):
+            if item["type"] == "delta":
+                content_parts.append(str(item["content"]))
+                yield {"type": "delta", "content": str(item["content"])}
+            elif item["type"] == "usage":
+                usage = dict(item["usage"])
+                latency_ms = float(item["latency_ms"])
+        assistant_body = "".join(content_parts).strip()
+        assistant_message = add_chat_message(
+            thread_id,
+            "assistant",
+            "assistant",
+            "assistant",
+            assistant_body,
+            prompt_tokens=int(usage["prompt_tokens"]),
+            completion_tokens=int(usage["completion_tokens"]),
+            total_tokens=int(usage["total_tokens"]),
+            latency_ms=latency_ms,
+        )
+        update_chat_thread(thread_id, status="idle", last_error=None)
+        publish(
+            "chat",
+            thread_id,
+            "message.created",
+            {
+                **assistant_message,
+                "model": model,
+            },
+        )
+        yield {"type": "done", "message": assistant_message}
+    except Exception as exc:
+        update_chat_thread(thread_id, status="error", last_error=str(exc))
+        publish("chat", thread_id, "chat.failed", {"thread_id": thread_id, "error": str(exc)}, level="error")
+        yield {"type": "error", "error": str(exc)}

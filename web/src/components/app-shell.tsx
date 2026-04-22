@@ -88,13 +88,7 @@ export function AppShell({
         </aside>
 
         <div className="min-w-0">
-          <header className="flex h-[52px] items-center border-b border-[var(--border)] px-4 md:px-6">
-            <div className="nipux-mono text-[14px] uppercase tracking-[0.08em] text-[var(--foreground)]">
-              NIPUX
-            </div>
-          </header>
-
-          <main className="min-h-[calc(100vh-52px)]">{children}</main>
+          <main className="h-screen overflow-hidden">{children}</main>
         </div>
       </div>
     </div>

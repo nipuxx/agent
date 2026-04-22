@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
 import { BrowserPane } from "./browser-pane";
-import { createAgent, deleteAgent, startAgent, stopAgent, updateAgent } from "@/lib/api";
+import { createAgent, createThread, deleteAgent, getThreads, sendThreadMessage, startAgent, stopAgent, updateAgent } from "@/lib/api";
+import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,10 @@ export function AgentsView() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [threads, setThreads] = useState<Array<{ id: string; title: string; status: string }>>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [agentMessage, setAgentMessage] = useState("");
+  const [browserWidth, setBrowserWidth] = useState(560);
 
   const agents = useMemo(() => summary?.agents ?? [], [summary?.agents]);
   const runs = useMemo(() => summary?.runs ?? [], [summary?.runs]);
@@ -60,6 +65,30 @@ export function AgentsView() {
       ) ?? null,
     [runs, selectedAgent?.id],
   );
+  const { bundle } = useThreadBundle(selectedThreadId);
+
+  async function loadThreads(agentId: string) {
+    const rows = await getThreads(agentId);
+    setThreads(rows);
+    setSelectedThreadId((current) => (current && rows.some((row) => row.id === current) ? current : rows[0]?.id ?? null));
+    return rows;
+  }
+
+  useEffect(() => {
+    if (!selectedAgent?.id) {
+      setThreads([]);
+      setSelectedThreadId(null);
+      return;
+    }
+    let active = true;
+    loadThreads(selectedAgent.id).catch((err) => {
+      if (!active) return;
+      setActionError(err instanceof Error ? err.message : "Failed to load agent chats.");
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedAgent?.id]);
 
   async function handleSave() {
     if (!selectedAgent) return;
@@ -130,10 +159,48 @@ export function AgentsView() {
     }
   }
 
+  async function handleNewThread() {
+    if (!selectedAgent) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      const thread = await createThread({ agent_id: selectedAgent.id });
+      await loadThreads(selectedAgent.id);
+      setSelectedThreadId(thread.id);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to create agent chat.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleSendAgentMessage() {
+    if (!selectedAgent || !agentMessage.trim()) return;
+    setPending(true);
+    setActionError(null);
+    const body = agentMessage.trim();
+    setAgentMessage("");
+    try {
+      let threadId = selectedThreadId;
+      if (!threadId) {
+        const thread = await createThread({ agent_id: selectedAgent.id });
+        threadId = thread.id;
+        setSelectedThreadId(thread.id);
+      }
+      await sendThreadMessage(threadId, body);
+      await Promise.all([loadThreads(selectedAgent.id), refresh()]);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to send agent message.");
+      setAgentMessage(body);
+    } finally {
+      setPending(false);
+    }
+  }
+
   if (loading && !summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
           Loading agents...
         </div>
       </AppShell>
@@ -143,7 +210,7 @@ export function AgentsView() {
   if (!summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
           {error ?? "Agents are unavailable."}
         </div>
       </AppShell>
@@ -152,7 +219,10 @@ export function AgentsView() {
 
   return (
     <AppShell>
-      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)_520px]">
+      <section
+        className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:[grid-template-columns:280px_minmax(0,1fr)_var(--browser-width)]"
+        style={{ ["--browser-width" as string]: `${browserWidth}px` }}
+      >
         <aside className="min-h-0 border-r border-[var(--border)]">
           <div className="border-b border-[var(--border)] px-5 py-5">
             {panelLabel("agents")}
@@ -253,7 +323,7 @@ export function AgentsView() {
                 <div className="mt-3 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                   <div>Status: {selectedAgent?.status ?? "idle"}</div>
                   <div>Run: {selectedRun?.status ?? "idle"}</div>
-                  <div>Runtime: {summary.runtime_state.runtime_id ?? "auto"}</div>
+                  <div>Chats: {threads.length}</div>
                 </div>
               </div>
 
@@ -264,11 +334,108 @@ export function AgentsView() {
                 </div>
               </div>
             </div>
+
+            <div className="border border-[var(--border)] px-4 py-4">
+              <div className="flex items-center justify-between gap-3">
+                {panelLabel("agent chat")}
+                <Button variant="outline" size="sm" onClick={() => void handleNewThread()} disabled={!selectedAgent || pending}>
+                  New thread
+                </Button>
+              </div>
+
+              <div className="mt-4 grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+                <div className="min-h-0 border border-[var(--border)]">
+                  <div className="max-h-[360px] overflow-auto">
+                    {threads.length ? (
+                      threads.map((thread) => (
+                        <button
+                          key={thread.id}
+                          type="button"
+                          onClick={() => setSelectedThreadId(thread.id)}
+                          className={`w-full border-b border-[var(--border)] px-3 py-3 text-left transition-colors ${
+                            thread.id === selectedThreadId ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                          }`}
+                        >
+                          <div className="truncate text-[14px] text-[var(--foreground)]">{thread.title}</div>
+                          <div className="mt-1 nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                            {thread.status}
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                        No agent chats yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] border border-[var(--border)]">
+                  <div className="max-h-[360px] min-h-[240px] overflow-auto px-4 py-4">
+                    <div className="space-y-5">
+                      {bundle?.messages.length ? (
+                        bundle.messages.map((message) => (
+                          <div key={message.id} className={message.role === "assistant" ? "border border-[var(--border)] px-4 py-4" : ""}>
+                            <div className="nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--muted-foreground)]">
+                              {message.label}
+                            </div>
+                            <div className="mt-2 whitespace-pre-wrap text-[14px] leading-[1.8] text-[var(--foreground)]/88">
+                              {message.body}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[13px] leading-[1.8] text-[var(--muted-foreground)]">
+                          Select a thread or send a new message to this agent.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="border-t border-[var(--border)] px-4 py-4">
+                    <div className="grid gap-3">
+                      <Input
+                        value={agentMessage}
+                        onChange={(event) => setAgentMessage(event.target.value)}
+                        placeholder="Tell this agent what to do..."
+                        disabled={!selectedAgent || pending}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            void handleSendAgentMessage();
+                          }
+                        }}
+                      />
+                      <div className="flex justify-end">
+                        <Button size="sm" onClick={() => void handleSendAgentMessage()} disabled={!selectedAgent || pending || !agentMessage.trim()}>
+                          Send
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </main>
 
-        <aside className="min-h-0 overflow-hidden">
-          <BrowserPane agentId={selectedAgent?.id} title="browser" />
+        <aside className="min-h-0 overflow-hidden border-l border-[var(--border)]">
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+            {panelLabel("browser")}
+            <div className="flex items-center gap-3">
+              <div className="nipux-mono text-[10px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                width
+              </div>
+              <input
+                type="range"
+                min={420}
+                max={920}
+                step={20}
+                value={browserWidth}
+                onChange={(event) => setBrowserWidth(Number(event.target.value))}
+              />
+            </div>
+          </div>
+          <BrowserPane agentId={selectedAgent?.id} title="browser" showControls={false} />
         </aside>
       </section>
     </AppShell>

@@ -145,7 +145,8 @@ class LlamaCppAdapter(RuntimeAdapter):
     def start_command(self, *, runtime_home: Path, model_path: Path, port: int) -> list[str]:
         server_bin = shutil.which("llama-server")
         if server_bin:
-            return [
+            device_args = _llama_server_device_args(server_bin)
+            command = [
                 server_bin,
                 "--model",
                 str(model_path),
@@ -153,7 +154,14 @@ class LlamaCppAdapter(RuntimeAdapter):
                 "127.0.0.1",
                 "--port",
                 str(port),
+                "--parallel",
+                "1",
+                "--cache-ram",
+                "512",
             ]
+            if device_args:
+                command.extend(["--flash-attn", "on", "--gpu-layers", "all", *device_args])
+            return command
         return [
             str(_venv_python(runtime_home)),
             "-m",
@@ -172,6 +180,48 @@ ADAPTERS: dict[str, RuntimeAdapter] = {
     "vllm": VllmAdapter(),
     "llama.cpp": LlamaCppAdapter(),
 }
+
+
+def _llama_server_device_args(server_bin: str) -> list[str]:
+    try:
+        result = subprocess.run(
+            [server_bin, "--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except Exception:
+        return []
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
+    devices: list[tuple[str, str]] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if ":" not in line or "(" not in line:
+            continue
+        name_part, detail_part = line.split(":", 1)
+        device_id = name_part.strip()
+        details = detail_part.strip()
+        if not device_id or not details:
+            continue
+        devices.append((device_id, details))
+    if not devices:
+        return []
+
+    def priority(item: tuple[str, str]) -> tuple[int, int]:
+        device_id, details = item
+        normalized = details.lower()
+        discrete = 0 if any(token in normalized for token in [" rx ", "rtx", "nvidia", "arc"]) else 1
+        if "amd radeon rx" in normalized:
+            discrete = 0
+        if "radeon graphics" in normalized and "rx" not in normalized:
+            discrete = 2
+        free_match = re.search(r"([0-9]+)\s*MiB free", details)
+        free_mib = int(free_match.group(1)) if free_match else 0
+        return (discrete, -free_mib)
+
+    ordered = [device_id for device_id, _ in sorted(devices, key=priority)]
+    return ["--device", ",".join(ordered)]
 
 
 def _find_model(model_id: str | None) -> dict[str, Any] | None:

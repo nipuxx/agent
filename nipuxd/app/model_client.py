@@ -4,7 +4,7 @@ import json
 import time
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, Iterable
 
 
 def chat_completion(
@@ -53,6 +53,68 @@ def chat_completion(
         "latency_ms": (time.time() - started) * 1000.0,
         "raw": data,
     }
+
+
+def stream_chat_completion(
+    *,
+    endpoint: str,
+    api_key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float = 0.2,
+    max_tokens: int = 1200,
+) -> Iterable[dict[str, Any]]:
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    request = urllib.request.Request(
+        endpoint.rstrip("/") + "/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key or 'nipux-local'}",
+        },
+    )
+    started = time.time()
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            for raw_line in response:
+                line = raw_line.decode("utf-8", errors="ignore").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                chunk = json.loads(data)
+                choice = ((chunk.get("choices") or [{}])[0] or {})
+                delta = choice.get("delta") or {}
+                content = delta.get("content") or ""
+                usage = chunk.get("usage") or {}
+                if content:
+                    yield {
+                        "type": "delta",
+                        "content": str(content),
+                    }
+                if usage:
+                    yield {
+                        "type": "usage",
+                        "usage": {
+                            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+                            "completion_tokens": int(usage.get("completion_tokens") or 0),
+                            "total_tokens": int(usage.get("total_tokens") or 0),
+                        },
+                        "latency_ms": (time.time() - started) * 1000.0,
+                    }
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(body or str(exc)) from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def parse_json_response(text: str) -> dict[str, Any]:

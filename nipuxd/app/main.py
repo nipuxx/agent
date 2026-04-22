@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from .chat_manager import (
     get_chat_bundle,
     list_chat_thread_records,
     post_chat_message,
+    stream_chat_message,
 )
 from .browser_service import browser_command, get_browser_session, get_browser_view, get_frame_path
 from .db import (
@@ -64,31 +66,78 @@ app.add_middleware(
 init_db()
 
 
-def _recent_log_lines(limit: int = 12) -> list[str]:
-    lines: list[str] = []
+PROMPT_COST_PER_MILLION = 0.06
+COMPLETION_COST_PER_MILLION = 0.18
+
+
+def _format_event_line(event: dict[str, Any]) -> str:
+    payload = event.get("payload") or {}
+    event_type = str(event.get("event_type") or "")
+    if not isinstance(payload, dict):
+        return event_type
+
+    if event_type == "message.created":
+        body = str(payload.get("body") or "").strip().replace("\n", " ")
+        role = str(payload.get("role") or payload.get("label") or "message").upper()
+        if body:
+            return f"[chat] {role}: {body[:96]}"
+        return f"[chat] {role}"
+    if event_type == "chat.failed":
+        return f"[chat] failed: {payload.get('error') or 'unknown error'}"
+    if event_type == "agent.created":
+        return f"[agent] created {payload.get('name') or payload.get('agent_id')}"
+    if event_type == "agent.started":
+        return f"[agent] started {payload.get('agent_id')}"
+    if event_type == "agent.stopped":
+        return f"[agent] stopped {payload.get('agent_id')}"
+    if event_type == "runtime.started":
+        return f"[runtime] ready on {payload.get('endpoint') or 'local endpoint'}"
+    if event_type == "runtime.health.error":
+        return f"[runtime] health error: {payload.get('error') or 'unknown error'}"
+    if event_type == "runtime.install.failed":
+        return f"[runtime] install failed: {payload.get('error') or 'unknown error'}"
+    if event_type == "runtime.install.completed":
+        return f"[runtime] install completed"
+    if event_type == "run.started":
+        return f"[run] started {payload.get('run_id') or ''}".strip()
+    if event_type == "run.completed":
+        return f"[run] completed {payload.get('run_id') or ''}".strip()
+    if event_type == "run.failed":
+        return f"[run] failed: {payload.get('error') or 'unknown error'}"
+    if payload.get("line"):
+        return str(payload["line"])
+    if payload.get("message"):
+        return str(payload["message"])
+    return event_type
+
+
+def _recent_log_lines(limit: int = 12) -> list[dict[str, Any]]:
+    lines: list[dict[str, Any]] = []
     for event in list_recent_events(limit=limit):
-        payload = event.get("payload") or {}
-        if isinstance(payload, dict):
-            if payload.get("line"):
-                lines.append(str(payload["line"]))
-                continue
-            if payload.get("message"):
-                lines.append(str(payload["message"]))
-                continue
-            if event["event_type"].startswith("runtime."):
-                lines.append(f"[runtime] {event['event_type']}")
-                continue
-            if event["event_type"].startswith("run."):
-                lines.append(f"[run] {event['event_type']}")
-                continue
-            if event["event_type"].startswith("task."):
-                lines.append(f"[task] {event['event_type']}")
-                continue
-            if event["event_type"].startswith("browser."):
-                lines.append(f"[browser] {event['event_type']}")
-                continue
-        lines.append(event["event_type"])
+        lines.append(
+            {
+                "id": event["id"],
+                "level": event["level"],
+                "event_type": event["event_type"],
+                "line": _format_event_line(event),
+                "created_at": event["created_at"],
+            }
+        )
     return lines[-limit:]
+
+
+def _runtime_process_stats(pid: int | None) -> dict[str, float | None]:
+    if not pid:
+        return {"model_process_rss_gb": None, "model_process_vms_gb": None}
+    try:
+        process = psutil.Process(int(pid))
+        memory = process.memory_info()
+    except (psutil.Error, ValueError, TypeError):
+        return {"model_process_rss_gb": None, "model_process_vms_gb": None}
+    return {
+        "model_process_rss_gb": round(memory.rss / (1024**3), 1),
+        "model_process_vms_gb": round(memory.vms / (1024**3), 1),
+    }
 
 
 def _build_nodes(agents: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -132,12 +181,15 @@ def build_summary() -> dict[str, Any]:
     agents = list_agent_records()
     runs = list_runs(limit=20)
     usage = get_usage_metrics()
+    runtime_process = _runtime_process_stats(runtime_state.get("pid"))
     nodes = _build_nodes(agents)
     memory = psutil.virtual_memory()
     telemetry = {
         "cpu_percent": round(psutil.cpu_percent(interval=0.0), 1),
         "ram_used_gb": round(memory.used / (1024**3), 1),
         "ram_total_gb": round(memory.total / (1024**3), 1),
+        "model_process_rss_gb": runtime_process["model_process_rss_gb"],
+        "model_process_vms_gb": runtime_process["model_process_vms_gb"],
         "node_count": len(nodes),
         "active_nodes": sum(1 for item in nodes if item["status"] == "active"),
         "active_sessions": int(usage.get("active_sessions") or 0),
@@ -151,8 +203,16 @@ def build_summary() -> dict[str, Any]:
         "total_tokens": int(usage.get("total_tokens") or 0),
         "requests": int(usage.get("total_sessions") or 0),
         "tool_calls": int(usage.get("tool_calls") or 0),
-        "api_equivalent_cost_usd": None,
-        "savings_vs_api_usd": None,
+        "api_equivalent_cost_usd": round(
+            (int(usage.get("prompt_tokens") or 0) / 1_000_000.0) * PROMPT_COST_PER_MILLION
+            + (int(usage.get("completion_tokens") or 0) / 1_000_000.0) * COMPLETION_COST_PER_MILLION,
+            4,
+        ),
+        "savings_vs_api_usd": round(
+            (int(usage.get("prompt_tokens") or 0) / 1_000_000.0) * PROMPT_COST_PER_MILLION
+            + (int(usage.get("completion_tokens") or 0) / 1_000_000.0) * COMPLETION_COST_PER_MILLION,
+            4,
+        ),
     }
     return {
         "product": "Nipux",
@@ -372,6 +432,22 @@ def chat_thread_message(thread_id: str, payload: dict[str, Any] = Body(...)) -> 
         return post_chat_message(thread_id, body)
     except Exception as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/chat/threads/{thread_id}/stream")
+def chat_thread_stream(thread_id: str, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
+    body = str(payload.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Missing message body")
+
+    def generate() -> Any:
+        try:
+            for item in stream_chat_message(thread_id, body):
+                yield f"data: {json.dumps(item, separators=(',', ':'))}\n\n"
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(exc)}, separators=(',', ':'))}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 @app.get("/api/chat/threads/{thread_id}/events")

@@ -30,6 +30,8 @@ export interface TelemetrySummary {
   cpu_percent: number;
   ram_used_gb: number;
   ram_total_gb: number;
+  model_process_rss_gb?: number | null;
+  model_process_vms_gb?: number | null;
   node_count: number;
   active_nodes: number;
   active_sessions: number;
@@ -323,7 +325,13 @@ export interface NipuxSummary {
   runtime_state: RuntimeStateSummary;
   runtime_plan: RuntimePlan;
   nodes: NodeSummary[];
-  log_lines: string[];
+  log_lines: Array<{
+    id: number;
+    level: string;
+    event_type: string;
+    line: string;
+    created_at: number;
+  }>;
   usage_summary: UsageSummary;
   agents: AgentRecord[];
   runs: RunRecord[];

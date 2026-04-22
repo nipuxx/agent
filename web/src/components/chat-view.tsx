@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 
 import { AppShell } from "./app-shell";
-import { createChatThread, getChatThreads, sendChatMessage } from "@/lib/api";
+import { apiUrl, createChatThread, getChatThreads } from "@/lib/api";
 import { useChatBundle } from "@/lib/use-chat-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +60,7 @@ export function ChatView() {
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
 
   async function loadThreads() {
     const rows = await getChatThreads();
@@ -102,17 +103,57 @@ export function ChatView() {
   }
 
   async function handleSend() {
-    if (!selectedThreadId || !message.trim()) return;
+    if (!message.trim()) return;
     setPending(true);
     setActionError(null);
     const body = message.trim();
     setMessage("");
+    setStreamingText("");
     try {
-      await sendChatMessage(selectedThreadId, body);
+      let threadId = selectedThreadId;
+      if (!threadId) {
+        const thread = await createChatThread();
+        threadId = thread.id;
+        setSelectedThreadId(thread.id);
+      }
+      const response = await fetch(apiUrl(`/api/chat/threads/${threadId}/stream`), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      if (!response.ok || !response.body) {
+        throw new Error((await response.text()) || "Failed to stream message.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const line = block
+            .split("\n")
+            .find((item) => item.startsWith("data:"));
+          if (!line) continue;
+          const payload = JSON.parse(line.slice(5).trim()) as { type: string; content?: string; error?: string };
+          if (payload.type === "delta") {
+            setStreamingText((current) => current + String(payload.content ?? ""));
+          } else if (payload.type === "error") {
+            throw new Error(payload.error || "Streaming failed.");
+          }
+        }
+      }
+      setStreamingText("");
       await Promise.all([loadThreads(), refresh()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to send message.");
       setMessage(body);
+      setStreamingText("");
     } finally {
       setPending(false);
     }
@@ -121,7 +162,7 @@ export function ChatView() {
   if (loading && !summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
           Loading chat...
         </div>
       </AppShell>
@@ -131,7 +172,7 @@ export function ChatView() {
   if (!summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
           {error ?? "Chat is unavailable."}
         </div>
       </AppShell>
@@ -142,7 +183,7 @@ export function ChatView() {
 
   return (
     <AppShell>
-      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
+      <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
         <aside
           className={cn(
             "min-h-0 border-r border-[var(--border)] transition-[width] duration-200",
@@ -228,9 +269,6 @@ export function ChatView() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge variant={summary.runtime_state.model_loaded ? "success" : "secondary"}>
-                  {summary.runtime_state.model_loaded ? "model live" : "runtime idle"}
-                </Badge>
                 <Badge variant="secondary">{modelLabel}</Badge>
                 {selectedThread ? <Badge variant="secondary">{threadTokenTotal} tokens</Badge> : null}
               </div>
@@ -240,10 +278,13 @@ export function ChatView() {
 
           <div className="flex-1 overflow-auto px-5 py-6 md:px-8 md:py-8">
             <div className="space-y-8">
-              {bundle?.messages.length ? (
-                bundle.messages.map((item) => (
-                  <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
-                ))
+              {bundle?.messages.length || streamingText ? (
+                <>
+                  {(bundle?.messages ?? []).map((item) => (
+                    <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
+                  ))}
+                  {streamingText ? <MessageBlock label="assistant" body={streamingText} role="assistant" /> : null}
+                </>
               ) : (
                 <div className="text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
                   Start a chat and ask the model anything about the system or your work.

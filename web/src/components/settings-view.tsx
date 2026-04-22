@@ -177,7 +177,7 @@ export function SettingsView() {
   if (loading && !summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center nipux-mono text-[12px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
           Loading settings...
         </div>
       </AppShell>
@@ -187,7 +187,7 @@ export function SettingsView() {
   if (!summary) {
     return (
       <AppShell>
-        <div className="flex min-h-[calc(100vh-52px)] items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
+        <div className="flex min-h-screen items-center justify-center px-6 text-[15px] text-[var(--muted-foreground)]">
           {error ?? "Settings are unavailable."}
         </div>
       </AppShell>
@@ -196,7 +196,7 @@ export function SettingsView() {
 
   return (
     <AppShell>
-      <section className="grid h-[calc(100vh-52px)] min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
         <main className="min-h-0 overflow-auto border-r border-[var(--border)] px-5 py-5 md:px-6">
           <header className="border border-[var(--border)] px-5 py-5">
             {panelLabel("settings")}
