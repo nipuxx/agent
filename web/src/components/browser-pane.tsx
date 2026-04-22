@@ -116,19 +116,21 @@ export function BrowserPane({
   return (
     <div
       className={`grid h-full min-h-0 min-w-0 border border-[var(--border)] ${
-        showControls ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]" : "grid-rows-[auto_minmax(0,1fr)_auto]"
+        showControls ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]"
       }`}
     >
-      <div className="border-b border-[var(--border)] px-4 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
-            {title}
-          </div>
-          <div className="nipux-mono text-[10px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-            {session?.control_mode === "manual" ? "manual" : "agent"}
+      {showControls ? (
+        <div className="border-b border-[var(--border)] px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+              {title}
+            </div>
+            <div className="nipux-mono text-[10px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+              {session?.control_mode === "manual" ? "manual" : "agent"}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {showControls ? (
         <div className="grid grid-cols-[minmax(0,1fr)_56px] gap-2 border-b border-[var(--border)] px-4 py-3">
@@ -144,7 +146,7 @@ export function BrowserPane({
         </div>
       ) : null}
 
-      <div className={`min-h-0 bg-black/20 ${compact ? "min-h-[340px]" : "min-h-[460px]"}`}>
+      <div className={`min-h-0 bg-black/20 ${compact ? "min-h-[340px]" : "min-h-[520px]"}`}>
         {frameSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -163,7 +165,7 @@ export function BrowserPane({
 
       <div className="border-t border-[var(--border)] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
+          <div className="truncate text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
           {!showControls ? (
             <Button
               variant="outline"

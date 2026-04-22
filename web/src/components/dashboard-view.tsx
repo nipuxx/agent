@@ -19,16 +19,18 @@ function panelLabel(label: string) {
 function Stat({
   label,
   value,
+  valueClassName,
 }: {
   label: string;
   value: string;
+  valueClassName?: string;
 }) {
   return (
     <div className="border border-[var(--border)] px-4 py-4">
       <div className="nipux-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
         {label}
       </div>
-      <div className="mt-3 text-[24px] font-medium tracking-[-0.05em] text-[var(--foreground)]">
+      <div className={`mt-3 text-[24px] font-medium tracking-[-0.05em] text-[var(--foreground)] ${valueClassName ?? ""}`}>
         {value}
       </div>
     </div>
@@ -59,6 +61,7 @@ export function DashboardView() {
     () => Number(summary?.usage_summary.savings_vs_api_usd ?? 0),
     [summary?.usage_summary.savings_vs_api_usd],
   );
+  const formattedSavings = tokenSavings >= 0.01 ? `$${tokenSavings.toFixed(2)}` : `$${tokenSavings.toFixed(4)}`;
 
   if (loading && !summary) {
     return (
@@ -94,7 +97,7 @@ export function DashboardView() {
     <AppShell>
       <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
         <main className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] border-r border-[var(--border)]">
-          <header className="border-b border-[var(--border)] bg-[linear-gradient(90deg,rgba(138,189,110,0.08),transparent_34%)] px-5 py-5 md:px-6">
+          <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
             {panelLabel("dashboard")}
             <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -108,7 +111,7 @@ export function DashboardView() {
             </div>
           </header>
 
-          <div className="grid gap-px bg-[var(--border)] md:grid-cols-4 xl:grid-cols-7">
+          <div className="grid gap-px bg-[var(--border)] md:grid-cols-3 xl:grid-cols-6">
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
               <Stat label="Active agents" value={String(activeNodes.length)} />
             </div>
@@ -119,16 +122,13 @@ export function DashboardView() {
               <Stat label="Total tokens" value={String(summary.usage_summary.total_tokens)} />
             </div>
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
-              <Stat label="Prompt tokens" value={String(summary.usage_summary.prompt_tokens)} />
-            </div>
-            <div className="bg-[var(--background)] px-5 py-5 md:px-6">
               <Stat label="Completion tokens" value={String(summary.usage_summary.completion_tokens)} />
             </div>
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
               <Stat label="Throughput" value={`${summary.telemetry.total_throughput_tps.toFixed(1)} tok/s`} />
             </div>
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
-              <Stat label="Money saved" value={`$${tokenSavings.toFixed(2)}`} />
+              <Stat label="Money saved" value={formattedSavings} valueClassName="text-[#8abd6e]" />
             </div>
           </div>
 
@@ -198,12 +198,12 @@ export function DashboardView() {
                 </div>
 
                 <div className="border border-[var(--border)] px-4 py-4">
-                  {panelLabel("api benchmark")}
+                  {panelLabel("host")}
                   <div className="mt-4 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
-                    <div>Prompt: $0.06 / 1M</div>
-                    <div>Completion: $0.18 / 1M</div>
                     <div>Host: {summary.system.hostname}</div>
                     <div>{summary.system.gpus.length ? `${summary.system.gpus.length} GPU(s)` : "CPU only"}</div>
+                    <div>Platform: {summary.system.platform}</div>
+                    <div>Arch: {summary.system.arch}</div>
                   </div>
                 </div>
               </aside>

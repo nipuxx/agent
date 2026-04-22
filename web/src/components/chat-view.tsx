@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 
 import { AppShell } from "./app-shell";
 import { apiUrl, createChatThread, getChatThreads } from "@/lib/api";
 import { useChatBundle } from "@/lib/use-chat-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -37,7 +36,7 @@ function MessageBlock({
         assistant ? "border-[var(--border)] bg-white/[0.02]" : "border-transparent bg-transparent px-0",
       )}
     >
-      <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+      <div className="nipux-mono text-[11px] tracking-[0.08em] text-[var(--muted-foreground)] capitalize">
         {label}
       </div>
       <div
@@ -61,6 +60,7 @@ export function ChatView() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [pendingMessages, setPendingMessages] = useState<Array<{ id: string; label: string; body: string; role: string }>>([]);
 
   async function loadThreads() {
     const rows = await getChatThreads();
@@ -83,11 +83,6 @@ export function ChatView() {
   const { bundle } = useChatBundle(selectedThreadId);
   const selectedThread = bundle?.thread ?? threads.find((thread) => thread.id === selectedThreadId) ?? null;
 
-  const threadTokenTotal = useMemo(
-    () => bundle?.messages.reduce((sum, item) => sum + Number(item.total_tokens || 0), 0) ?? 0,
-    [bundle?.messages],
-  );
-
   async function handleNewChat() {
     setPending(true);
     setActionError(null);
@@ -109,12 +104,14 @@ export function ChatView() {
     const body = message.trim();
     setMessage("");
     setStreamingText("");
+    setPendingMessages([]);
     try {
       let threadId = selectedThreadId;
       if (!threadId) {
         const thread = await createChatThread();
         threadId = thread.id;
         setSelectedThreadId(thread.id);
+        setThreads((current) => [thread, ...current.filter((item) => item.id !== thread.id)]);
       }
       const response = await fetch(apiUrl(`/api/chat/threads/${threadId}/stream`), {
         method: "POST",
@@ -129,6 +126,46 @@ export function ChatView() {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      const applyBlock = (block: string) => {
+        const line = block
+          .split("\n")
+          .find((item) => item.startsWith("data:"));
+        if (!line) return;
+        const payload = JSON.parse(line.slice(5).trim()) as {
+          type: string;
+          content?: string;
+          error?: string;
+          message?: { id?: string; label?: string; body?: string; role?: string };
+        };
+        if (payload.type === "delta") {
+          setStreamingText((current) => current + String(payload.content ?? ""));
+        } else if (payload.type === "user" && payload.message) {
+          setPendingMessages([
+            {
+              id: payload.message.id || `temp-user-${Date.now()}`,
+              label: payload.message.label || "user",
+              body: payload.message.body || body,
+              role: payload.message.role || "user",
+            },
+          ]);
+        } else if (payload.type === "done" && payload.message) {
+          setPendingMessages((current) => {
+            const next = current.filter((item) => item.role !== "assistant");
+            return [
+              ...next,
+              {
+                id: payload.message?.id || `temp-assistant-${Date.now()}`,
+                label: payload.message?.label || "assistant",
+                body: payload.message?.body || "",
+                role: payload.message?.role || "assistant",
+              },
+            ];
+          });
+        } else if (payload.type === "error") {
+          throw new Error(payload.error || "Streaming failed.");
+        }
+      };
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -136,24 +173,20 @@ export function ChatView() {
         const blocks = buffer.split("\n\n");
         buffer = blocks.pop() ?? "";
         for (const block of blocks) {
-          const line = block
-            .split("\n")
-            .find((item) => item.startsWith("data:"));
-          if (!line) continue;
-          const payload = JSON.parse(line.slice(5).trim()) as { type: string; content?: string; error?: string };
-          if (payload.type === "delta") {
-            setStreamingText((current) => current + String(payload.content ?? ""));
-          } else if (payload.type === "error") {
-            throw new Error(payload.error || "Streaming failed.");
-          }
+          applyBlock(block);
         }
       }
       setStreamingText("");
+      if (buffer.trim()) {
+        applyBlock(buffer);
+      }
       await Promise.all([loadThreads(), refresh()]);
+      setPendingMessages([]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to send message.");
       setMessage(body);
       setStreamingText("");
+      setPendingMessages([]);
     } finally {
       setPending(false);
     }
@@ -178,8 +211,6 @@ export function ChatView() {
       </AppShell>
     );
   }
-
-  const modelLabel = summary.runtime_state.active_model_id || summary.settings.openai_model || "No model configured";
 
   return (
     <AppShell>
@@ -268,10 +299,6 @@ export function ChatView() {
                   One-on-one model chat with live Nipux context from runtime state, agents, runs, and recent system activity.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="secondary">{modelLabel}</Badge>
-                {selectedThread ? <Badge variant="secondary">{threadTokenTotal} tokens</Badge> : null}
-              </div>
             </div>
             {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
           </header>
@@ -281,6 +308,9 @@ export function ChatView() {
               {bundle?.messages.length || streamingText ? (
                 <>
                   {(bundle?.messages ?? []).map((item) => (
+                    <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
+                  ))}
+                  {pendingMessages.map((item) => (
                     <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
                   ))}
                   {streamingText ? <MessageBlock label="assistant" body={streamingText} role="assistant" /> : null}
@@ -299,7 +329,7 @@ export function ChatView() {
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="Send a message to the model..."
-                disabled={!selectedThreadId || pending}
+                disabled={pending}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
@@ -311,7 +341,7 @@ export function ChatView() {
                 <div className="text-[12px] leading-[1.7] text-[var(--muted-foreground)]">
                   This chat is separate from agents and does not use the browser or run harness.
                 </div>
-                <Button size="sm" onClick={() => void handleSend()} disabled={!selectedThreadId || pending || !message.trim()}>
+                <Button size="sm" onClick={() => void handleSend()} disabled={pending || !message.trim()}>
                   Send
                 </Button>
               </div>

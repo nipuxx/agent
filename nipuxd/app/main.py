@@ -66,8 +66,8 @@ app.add_middleware(
 init_db()
 
 
-PROMPT_COST_PER_MILLION = 0.06
-COMPLETION_COST_PER_MILLION = 0.18
+PROMPT_COST_PER_MILLION = 0.075
+COMPLETION_COST_PER_MILLION = 0.22
 
 
 def _format_event_line(event: dict[str, Any]) -> str:
@@ -78,7 +78,7 @@ def _format_event_line(event: dict[str, Any]) -> str:
 
     if event_type == "message.created":
         body = str(payload.get("body") or "").strip().replace("\n", " ")
-        role = str(payload.get("role") or payload.get("label") or "message").upper()
+        role = str(payload.get("role") or payload.get("label") or "message").strip().title()
         if body:
             return f"[chat] {role}: {body[:96]}"
         return f"[chat] {role}"
