@@ -203,7 +203,7 @@ def _llama_server_device_args(server_bin: str) -> list[str]:
         name_part, detail_part = line.split(":", 1)
         device_id = name_part.strip()
         details = detail_part.strip()
-        if not device_id or not details:
+        if not device_id or not details or not re.match(r"^(Vulkan|CUDA|Metal|SYCL|OpenCL)\d+$", device_id):
             continue
         devices.append((device_id, details))
     if not devices:
