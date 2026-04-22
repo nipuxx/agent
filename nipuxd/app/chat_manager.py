@@ -42,6 +42,26 @@ def _sanitized_settings() -> dict[str, Any]:
     }
 
 
+def _compact_event(event: dict[str, Any]) -> dict[str, Any]:
+    payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+    summary = (
+        payload.get("message")
+        or payload.get("line")
+        or payload.get("error")
+        or payload.get("thread_id")
+        or payload.get("run_id")
+        or payload.get("agent_id")
+        or ""
+    )
+    compact = {
+        "event_type": event.get("event_type"),
+        "level": event.get("level"),
+    }
+    if summary:
+        compact["summary"] = str(summary)[:160]
+    return compact
+
+
 def _system_context() -> dict[str, Any]:
     system = detect_system()
     runtime = get_runtime_state()
@@ -81,11 +101,7 @@ def _system_context() -> dict[str, Any]:
             for run in list_runs(limit=8)
         ],
         "recent_events": [
-            {
-                "event_type": event["event_type"],
-                "level": event["level"],
-                "payload": event["payload"],
-            }
+            _compact_event(event)
             for event in list_recent_events(limit=10)
         ],
     }
