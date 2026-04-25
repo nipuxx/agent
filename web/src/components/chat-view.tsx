@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 
 import { AppShell } from "./app-shell";
@@ -32,6 +32,7 @@ export function ChatView() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const messageViewportRef = useRef<HTMLDivElement | null>(null);
 
   async function loadThreads() {
     const rows = await getChatThreads();
@@ -71,6 +72,12 @@ export function ChatView() {
     const ids = new Set(persistedMessageIdKey.split("|"));
     setPendingMessages((current) => current.filter((item) => !ids.has(item.id)));
   }, [persistedMessageIdKey]);
+
+  useEffect(() => {
+    const viewport = messageViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+  }, [persistedMessageIdKey, visiblePendingMessages.length, streamingText]);
 
   async function handleNewChat() {
     setPending(true);
@@ -213,7 +220,7 @@ export function ChatView() {
 
   return (
     <AppShell>
-      <section className="grid h-full min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
+      <section className="grid h-[100dvh] min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
         <aside
           className={cn(
             "min-h-0 border-r border-[var(--border)] transition-[width] duration-200",
@@ -283,23 +290,23 @@ export function ChatView() {
           </div>
         </aside>
 
-        <div className="flex min-h-0 min-w-0 flex-col">
-          <header className="border-b border-[var(--border)] px-[clamp(16px,3vw,40px)] py-[clamp(16px,2.2vw,28px)]">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+          <header className="border-b border-[var(--border)] px-[clamp(14px,3vw,32px)] py-[clamp(12px,1.8vw,20px)]">
+            <div className="nipux-chat-column">
               <div className="min-w-0">
                 {panelLabel("direct chat")}
-                <h1 className="nipux-title mt-3 truncate text-[clamp(24px,3vw,34px)] text-[var(--foreground)]">
+                <h1 className="nipux-title mt-2 truncate text-[clamp(22px,2.5vw,30px)] text-[var(--foreground)]">
                   {selectedThread?.title ?? "No chat selected"}
                 </h1>
-                <p className="mt-3 hidden max-w-[920px] text-[14px] leading-[1.8] text-[var(--muted-foreground)] md:block">
-                  One-on-one model chat with live Nipux context from runtime state, agents, runs, and recent system activity.
-                </p>
               </div>
             </div>
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
-          <div className="flex-1 overflow-auto px-[clamp(16px,4vw,56px)] py-[clamp(16px,3vw,36px)]">
+          <div
+            ref={messageViewportRef}
+            className="min-h-0 overflow-y-auto px-[clamp(14px,4vw,48px)] py-[clamp(14px,2.6vw,30px)]"
+          >
             <div className="nipux-message-list">
               {bundle?.messages.length || visiblePendingMessages.length || streamingText ? (
                 <>
@@ -319,8 +326,8 @@ export function ChatView() {
             </div>
           </div>
 
-          <footer className="border-t border-[var(--border)] px-[clamp(16px,4vw,56px)] py-[clamp(14px,2vw,24px)]">
-            <div className="grid gap-3">
+          <footer className="border-t border-[var(--border)] px-[clamp(14px,4vw,48px)] py-[clamp(10px,1.6vw,16px)]">
+            <div className="nipux-chat-column grid grid-cols-[minmax(0,1fr)_auto] gap-2">
               <Input
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
@@ -333,14 +340,9 @@ export function ChatView() {
                   }
                 }}
               />
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[12px] leading-[1.7] text-[var(--muted-foreground)]">
-                  This chat is separate from agents and does not use the browser or run harness.
-                </div>
-                <Button size="sm" onClick={() => void handleSend()} disabled={pending || !message.trim()}>
-                  Send
-                </Button>
-              </div>
+              <Button size="sm" onClick={() => void handleSend()} disabled={pending || !message.trim()}>
+                Send
+              </Button>
             </div>
           </footer>
         </div>

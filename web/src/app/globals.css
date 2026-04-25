@@ -68,6 +68,7 @@
   --message-assistant-bg: var(--card-bg);
   --message-assistant-fg: var(--foreground);
   --message-assistant-border: var(--border);
+  --chat-content-width: 820px;
 }
 
 :root[data-theme="paper-terminal"] {
@@ -679,7 +680,12 @@ select {
 }
 
 .nipux-message-list {
-  width: min(100%, 1040px);
+  width: min(100%, var(--chat-content-width));
+  margin-inline: auto;
+}
+
+.nipux-chat-column {
+  width: min(100%, var(--chat-content-width));
   margin-inline: auto;
 }
 
@@ -701,7 +707,7 @@ select {
 }
 
 .nipux-message-bubble {
-  max-width: min(82%, 780px);
+  max-width: min(78%, 680px);
   border: var(--border-width) solid var(--message-assistant-border);
   border-radius: calc(var(--radius-card) + 6px);
   background: var(--message-assistant-bg);
@@ -739,7 +745,7 @@ select {
 
 @media (max-width: 720px) {
   .nipux-message-bubble {
-    max-width: 90%;
+    max-width: 92%;
   }
 }
 
