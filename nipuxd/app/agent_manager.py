@@ -7,7 +7,9 @@ from .db import (
     create_agent,
     create_thread,
     delete_agent,
+    delete_thread,
     get_agent,
+    get_active_run_for_thread,
     get_browser_session_by_agent,
     get_thread,
     list_agents,
@@ -17,7 +19,7 @@ from .db import (
     update_thread,
 )
 from .event_bus import publish
-from .harness import dispatch_run, ensure_run_for_message, start_agent, stop_agent
+from .harness import cancel_run, dispatch_run, ensure_run_for_message, start_agent, stop_agent
 
 
 def _thread_title(body: str) -> str:
@@ -46,6 +48,17 @@ def delete_agent_record(agent_id: str) -> None:
     stop_agent(agent_id)
     delete_agent(agent_id)
     publish("system", "agents", "agent.deleted", {"agent_id": agent_id})
+
+
+def delete_thread_record(thread_id: str) -> None:
+    thread = get_thread(thread_id)
+    if thread is None:
+        return
+    active_run = get_active_run_for_thread(thread_id)
+    if active_run:
+        cancel_run(active_run["id"])
+    delete_thread(thread_id)
+    publish("thread", thread_id, "thread.deleted", {"thread_id": thread_id, "agent_id": thread["agent_id"]})
 
 
 def list_thread_records(agent_id: str | None = None) -> list[dict[str, Any]]:

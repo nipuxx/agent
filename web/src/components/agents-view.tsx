@@ -4,13 +4,31 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
 import { ChatMessageBubble } from "./chat-message-bubble";
-import { createAgent, createThread, deleteAgent, getThreads, sendThreadMessage, startAgent, stopAgent } from "@/lib/api";
+import {
+  cancelRun,
+  createAgent,
+  createThread,
+  deleteAgent,
+  deleteThread,
+  getThreads,
+  pauseRun,
+  resumeRun,
+  sendThreadMessage,
+  startAgent,
+  stopAgent,
+  updateAgent,
+} from "@/lib/api";
 import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 type PendingMessage = { id: string; label: string; body: string; role: string };
+type AgentEditorMode = "create" | "edit";
+type AgentDraft = { name: string; description: string; system_prompt: string };
+
+const DEFAULT_AGENT_PROMPT = "Work deliberately, verify progress, and checkpoint before claiming success.";
 
 function panelLabel(label: string) {
   return (
@@ -29,6 +47,12 @@ export function AgentsView() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [agentMessage, setAgentMessage] = useState("");
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const [editorMode, setEditorMode] = useState<AgentEditorMode | null>(null);
+  const [agentDraft, setAgentDraft] = useState<AgentDraft>({
+    name: "New Agent",
+    description: "Custom long-running Nipux worker.",
+    system_prompt: DEFAULT_AGENT_PROMPT,
+  });
 
   const agents = useMemo(() => summary?.agents ?? [], [summary?.agents]);
   const runs = useMemo(() => summary?.runs ?? [], [summary?.runs]);
@@ -95,19 +119,45 @@ export function AgentsView() {
     };
   }, [selectedAgent?.id]);
 
-  async function handleCreate() {
+  function openCreateEditor() {
+    setAgentDraft({
+      name: "New Agent",
+      description: "Custom long-running Nipux worker.",
+      system_prompt: DEFAULT_AGENT_PROMPT,
+    });
+    setEditorMode("create");
+  }
+
+  function openEditEditor() {
+    if (!selectedAgent) return;
+    setAgentDraft({
+      name: selectedAgent.name,
+      description: selectedAgent.description,
+      system_prompt: selectedAgent.system_prompt || DEFAULT_AGENT_PROMPT,
+    });
+    setEditorMode("edit");
+  }
+
+  async function handleSaveAgent() {
     setPending(true);
     setActionError(null);
     try {
-      const created = await createAgent({
-        name: "New Agent",
-        description: "Custom long-running Nipux worker.",
-        system_prompt: "Work deliberately, verify progress, and checkpoint before claiming success.",
-      });
-      setSelectedId(created.id);
+      const payload = {
+        name: agentDraft.name.trim() || "New Agent",
+        description: agentDraft.description.trim(),
+        system_prompt: agentDraft.system_prompt.trim() || DEFAULT_AGENT_PROMPT,
+      };
+      if (editorMode === "edit" && selectedAgent) {
+        const updated = await updateAgent(selectedAgent.id, payload);
+        setSelectedId(updated.id);
+      } else {
+        const created = await createAgent(payload);
+        setSelectedId(created.id);
+      }
+      setEditorMode(null);
       await refresh();
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Failed to create agent.");
+      setActionError(err instanceof Error ? err.message : "Failed to save agent.");
     } finally {
       setPending(false);
     }
@@ -156,6 +206,41 @@ export function AgentsView() {
       setSelectedThreadId(thread.id);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to create agent chat.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleDeleteThread() {
+    if (!selectedAgent || !selectedThreadId) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      await deleteThread(selectedThreadId);
+      setPendingMessages([]);
+      await Promise.all([loadThreads(selectedAgent.id), refresh()]);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to delete agent chat.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleRunAction(action: "pause" | "resume" | "cancel") {
+    if (!selectedRun) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      if (action === "pause") {
+        await pauseRun(selectedRun.id);
+      } else if (action === "resume") {
+        await resumeRun(selectedRun.id);
+      } else {
+        await cancelRun(selectedRun.id);
+      }
+      await Promise.all([refresh(), refreshThreadBundle()]);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to update run.");
     } finally {
       setPending(false);
     }
@@ -234,7 +319,7 @@ export function AgentsView() {
                 {panelLabel("agents")}
                 <div className="nipux-title mt-3 text-[24px] text-[var(--foreground)]">Workers</div>
               </div>
-              <Button size="sm" onClick={() => void handleCreate()} disabled={pending}>
+              <Button size="sm" onClick={openCreateEditor} disabled={pending}>
                 New
               </Button>
             </div>
@@ -291,12 +376,34 @@ export function AgentsView() {
                   <Button variant="outline" size="sm" onClick={() => void handleDelete()} disabled={pending}>
                     Delete
                   </Button>
+                  <Button variant="outline" size="sm" onClick={openEditEditor} disabled={pending}>
+                    Edit
+                  </Button>
                   <Button size="sm" onClick={() => void handleToggle()} disabled={pending}>
                     {selectedAgent.status === "running" ? "Stop" : "Start"}
                   </Button>
                 </div>
               ) : null}
             </div>
+            {selectedRun ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-[12px] text-[var(--muted-foreground)]">
+                <span className="nipux-mono uppercase tracking-[var(--label-letter-spacing)]">
+                  Run: {selectedRun.status}
+                </span>
+                {selectedRun.status === "paused" ? (
+                  <Button variant="outline" size="sm" onClick={() => void handleRunAction("resume")} disabled={pending}>
+                    Resume
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => void handleRunAction("pause")} disabled={pending}>
+                    Pause
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => void handleRunAction("cancel")} disabled={pending}>
+                  Cancel run
+                </Button>
+              </div>
+            ) : null}
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
@@ -305,9 +412,14 @@ export function AgentsView() {
               <div className="nipux-panel min-h-0 overflow-hidden">
                 <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
                   {panelLabel("threads")}
-                  <Button variant="outline" size="sm" onClick={() => void handleNewThread()} disabled={!selectedAgent || pending}>
-                    New
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => void handleDeleteThread()} disabled={!selectedThreadId || pending}>
+                      Delete
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => void handleNewThread()} disabled={!selectedAgent || pending}>
+                      New
+                    </Button>
+                  </div>
                 </div>
                 <div className="max-h-full overflow-auto">
                   {threads.length ? (
@@ -390,6 +502,53 @@ export function AgentsView() {
         </main>
 
       </section>
+      {editorMode ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/58 px-4 py-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Agent editor">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Close agent editor"
+            onClick={() => setEditorMode(null)}
+          />
+          <div className="relative grid h-[min(620px,90dvh)] w-[min(720px,94vw)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[var(--radius-frame)] border border-[var(--border)] bg-[var(--background)] shadow-[var(--panel-shadow)]">
+            <header className="border-b border-[var(--border)] px-5 py-4">
+              {panelLabel(editorMode === "edit" ? "edit agent" : "new agent")}
+              <div className="nipux-title mt-2 text-[26px] text-[var(--foreground)]">
+                {editorMode === "edit" ? "Agent definition" : "Create worker"}
+              </div>
+            </header>
+            <main className="min-h-0 overflow-auto p-5">
+              <div className="grid gap-4">
+                <Input
+                  value={agentDraft.name}
+                  onChange={(event) => setAgentDraft((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Agent name"
+                />
+                <Textarea
+                  value={agentDraft.description}
+                  onChange={(event) => setAgentDraft((current) => ({ ...current, description: event.target.value }))}
+                  placeholder="Short description"
+                  className="min-h-[86px]"
+                />
+                <Textarea
+                  value={agentDraft.system_prompt}
+                  onChange={(event) => setAgentDraft((current) => ({ ...current, system_prompt: event.target.value }))}
+                  placeholder="System prompt"
+                  className="min-h-[220px]"
+                />
+              </div>
+            </main>
+            <footer className="flex items-center justify-end gap-2 border-t border-[var(--border)] px-5 py-4">
+              <Button variant="outline" size="sm" onClick={() => setEditorMode(null)} disabled={pending}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={() => void handleSaveAgent()} disabled={pending}>
+                Save
+              </Button>
+            </footer>
+          </div>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

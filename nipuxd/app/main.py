@@ -13,6 +13,7 @@ from .agent_manager import (
     create_agent_record,
     create_thread_record,
     delete_agent_record,
+    delete_thread_record,
     get_agent_browser,
     get_thread_bundle,
     list_agent_records,
@@ -22,6 +23,7 @@ from .agent_manager import (
 )
 from .chat_manager import (
     create_chat_thread_record,
+    delete_chat_thread_record,
     get_chat_bundle,
     list_chat_thread_records,
     post_chat_message,
@@ -381,6 +383,12 @@ def threads_create(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     return create_thread_record(agent_id, payload.get("title"))
 
 
+@app.delete("/api/threads/{thread_id}")
+def threads_delete(thread_id: str) -> dict[str, Any]:
+    delete_thread_record(thread_id)
+    return {"ok": True}
+
+
 @app.get("/api/threads/{thread_id}")
 def thread_bundle(thread_id: str) -> dict[str, Any]:
     bundle = get_thread_bundle(thread_id)
@@ -413,6 +421,12 @@ def chat_threads() -> list[dict[str, Any]]:
 @app.post("/api/chat/threads")
 def chat_threads_create(payload: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     return create_chat_thread_record(str(payload.get("title") or "").strip() or None)
+
+
+@app.delete("/api/chat/threads/{thread_id}")
+def chat_threads_delete(thread_id: str) -> dict[str, Any]:
+    delete_chat_thread_record(thread_id)
+    return {"ok": True}
 
 
 @app.get("/api/chat/threads/{thread_id}")

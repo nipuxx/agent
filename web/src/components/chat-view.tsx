@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Plus, Trash2 } from "lucide-react";
 
 import { AppShell } from "./app-shell";
 import { ChatMessageBubble } from "./chat-message-bubble";
-import { apiUrl, createChatThread, getChatThreads } from "@/lib/api";
+import { apiUrl, createChatThread, deleteChatThread, getChatThreads } from "@/lib/api";
 import { useChatBundle } from "@/lib/use-chat-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,22 @@ export function ChatView() {
       setSelectedThreadId(thread.id);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to create chat.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleDeleteChat() {
+    if (!selectedThreadId) return;
+    setPending(true);
+    setActionError(null);
+    try {
+      await deleteChatThread(selectedThreadId);
+      setPendingMessages([]);
+      setStreamingText("");
+      await loadThreads();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to delete chat.");
     } finally {
       setPending(false);
     }
@@ -293,11 +309,25 @@ export function ChatView() {
         <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <header className="border-b border-[var(--border)] px-[clamp(14px,3vw,32px)] py-[clamp(12px,1.8vw,20px)]">
             <div className="nipux-chat-column">
-              <div className="min-w-0">
-                {panelLabel("direct chat")}
-                <h1 className="nipux-title mt-2 truncate text-[clamp(22px,2.5vw,30px)] text-[var(--foreground)]">
-                  {selectedThread?.title ?? "No chat selected"}
-                </h1>
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <div className="min-w-0">
+                  {panelLabel("direct chat")}
+                  <h1 className="nipux-title mt-2 truncate text-[clamp(22px,2.5vw,30px)] text-[var(--foreground)]">
+                    {selectedThread?.title ?? "No chat selected"}
+                  </h1>
+                </div>
+                {selectedThread ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleDeleteChat()}
+                    disabled={pending}
+                    aria-label="Delete chat"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                ) : null}
               </div>
             </div>
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}

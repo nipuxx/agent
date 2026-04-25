@@ -145,6 +145,10 @@ export function createThread(payload: { agent_id: string; title?: string }): Pro
   });
 }
 
+export function deleteThread(threadId: string): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/threads/${threadId}`, { method: "DELETE" });
+}
+
 export function getThreadBundle(threadId: string): Promise<ThreadBundle> {
   return fetchJson(`/api/threads/${threadId}`);
 }
@@ -165,6 +169,10 @@ export function createChatThread(payload?: { title?: string }): Promise<ChatThre
     method: "POST",
     body: JSON.stringify(payload ?? {}),
   });
+}
+
+export function deleteChatThread(threadId: string): Promise<{ ok: boolean }> {
+  return fetchJson(`/api/chat/threads/${threadId}`, { method: "DELETE" });
 }
 
 export function getChatBundle(threadId: string): Promise<ChatBundle> {

@@ -7,6 +7,7 @@ from .agent_manager import list_agent_records
 from .db import (
     add_chat_message,
     create_chat_thread,
+    delete_chat_thread,
     get_app_settings,
     get_chat_thread,
     get_runtime_state,
@@ -147,6 +148,14 @@ def create_chat_thread_record(title: str | None = None) -> dict[str, Any]:
     thread = create_chat_thread(title or "New chat")
     publish("chat", thread["id"], "chat.created", {"thread_id": thread["id"]})
     return thread
+
+
+def delete_chat_thread_record(thread_id: str) -> None:
+    thread = get_chat_thread(thread_id)
+    if thread is None:
+        return
+    delete_chat_thread(thread_id)
+    publish("chat", thread_id, "chat.deleted", {"thread_id": thread_id, "title": thread["title"]})
 
 
 def post_chat_message(thread_id: str, body: str) -> dict[str, Any]:

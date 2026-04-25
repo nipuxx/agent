@@ -626,6 +626,15 @@ def delete_agent(agent_id: str) -> None:
         conn.close()
 
 
+def delete_thread(thread_id: str) -> None:
+    conn = connect()
+    try:
+        conn.execute("DELETE FROM threads WHERE id = ?", (thread_id,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def list_threads(agent_id: str | None = None) -> list[dict[str, Any]]:
     conn = connect()
     try:
@@ -802,6 +811,15 @@ def update_chat_thread(thread_id: str, **fields: Any) -> dict[str, Any] | None:
     finally:
         conn.close()
     return get_chat_thread(thread_id)
+
+
+def delete_chat_thread(thread_id: str) -> None:
+    conn = connect()
+    try:
+        conn.execute("DELETE FROM chat_threads WHERE id = ?", (thread_id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def list_chat_messages(thread_id: str) -> list[dict[str, Any]]:
