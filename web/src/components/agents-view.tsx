@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
-import { BrowserPane } from "./browser-pane";
 import { ChatMessageBubble } from "./chat-message-bubble";
 import { createAgent, createThread, deleteAgent, getThreads, sendThreadMessage, startAgent, stopAgent } from "@/lib/api";
 import { useThreadBundle } from "@/lib/use-thread-bundle";
@@ -29,8 +28,6 @@ export function AgentsView() {
   const [threads, setThreads] = useState<Array<{ id: string; title: string; status: string }>>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [agentMessage, setAgentMessage] = useState("");
-  const [browserWidth, setBrowserWidth] = useState(600);
-  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
 
   const agents = useMemo(() => summary?.agents ?? [], [summary?.agents]);
@@ -97,28 +94,6 @@ export function AgentsView() {
       active = false;
     };
   }, [selectedAgent?.id]);
-
-  useEffect(() => {
-    function handleMove(event: MouseEvent) {
-      if (!resizeRef.current) return;
-      const maxWidth = Math.max(360, Math.min(980, window.innerWidth * 0.42));
-      const nextWidth = Math.min(maxWidth, Math.max(340, resizeRef.current.startWidth - (event.clientX - resizeRef.current.startX)));
-      setBrowserWidth(nextWidth);
-    }
-
-    function handleUp() {
-      resizeRef.current = null;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-    };
-  }, []);
 
   async function handleCreate() {
     setPending(true);
@@ -251,10 +226,7 @@ export function AgentsView() {
 
   return (
     <AppShell>
-      <section
-        className="nipux-agents-layout grid h-full min-h-0 min-w-0 overflow-hidden"
-        style={{ ["--browser-width" as string]: `${browserWidth}px` }}
-      >
+      <section className="nipux-agents-layout grid h-full min-h-0 min-w-0 overflow-hidden">
         <aside className="min-h-0 border-r border-[var(--border)]">
           <div className="border-b border-[var(--border)] p-[var(--page-padding)]">
             <div className="flex items-center justify-between gap-3">
@@ -417,18 +389,6 @@ export function AgentsView() {
           </div>
         </main>
 
-        <div
-          className="hidden xl:block cursor-col-resize bg-[var(--border)] transition-colors hover:bg-[var(--border-strong)]"
-          onMouseDown={(event) => {
-            resizeRef.current = { startX: event.clientX, startWidth: browserWidth };
-            document.body.style.cursor = "col-resize";
-            document.body.style.userSelect = "none";
-          }}
-        />
-
-        <aside className="hidden min-h-0 overflow-hidden xl:block">
-          <BrowserPane agentId={selectedAgent?.id} title="browser" showControls={false} />
-        </aside>
       </section>
     </AppShell>
   );

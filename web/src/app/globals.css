@@ -755,7 +755,7 @@ select {
 
 @media (min-width: 1280px) {
   .nipux-agents-layout {
-    grid-template-columns: clamp(220px, 18vw, 280px) minmax(440px, 1fr) 8px minmax(340px, min(var(--browser-width), 42vw));
+    grid-template-columns: clamp(220px, 18vw, 280px) minmax(0, 1fr);
   }
 }
 
