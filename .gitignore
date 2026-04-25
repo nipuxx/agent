@@ -14,4 +14,4 @@ nipuxd/.venv/
 nipuxd/.mypy_cache/
 nipuxd/.pytest_cache/
 logs/
-
+.nipux/

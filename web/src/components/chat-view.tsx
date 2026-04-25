@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 function panelLabel(label: string) {
   return (
-    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="nipux-label">
       {label}
     </div>
   );
@@ -32,7 +32,7 @@ function MessageBlock({
   return (
     <div
       className={cn(
-        "max-w-[920px] border px-4 py-4",
+        "max-w-[920px] border p-[var(--card-padding)]",
         assistant ? "border-[var(--border)] bg-[var(--surface)]" : "border-transparent bg-transparent px-0",
       )}
     >
@@ -264,7 +264,7 @@ export function ChatView() {
                       )}
                     >
                       {sidebarCollapsed ? (
-                        <div className="flex h-10 w-10 items-center justify-center border border-[var(--border)] nipux-mono text-[11px] uppercase tracking-[0.14em] text-[var(--foreground)]/78">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] nipux-mono text-[11px] uppercase tracking-[var(--label-letter-spacing)] text-[var(--foreground)]/78">
                           {String(index + 1).padStart(2, "0")}
                         </div>
                       ) : (
@@ -288,11 +288,11 @@ export function ChatView() {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-col">
-          <header className="border-b border-[var(--border)] px-5 py-5 md:px-8">
+          <header className="border-b border-[var(--border)] p-[var(--page-padding)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 {panelLabel("direct chat")}
-                <h1 className="mt-3 truncate text-[34px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                <h1 className="nipux-title mt-3 truncate text-[34px] text-[var(--foreground)]">
                   {selectedThread?.title ?? "No chat selected"}
                 </h1>
                 <p className="mt-3 max-w-[920px] text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
@@ -303,7 +303,7 @@ export function ChatView() {
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
-          <div className="flex-1 overflow-auto px-5 py-6 md:px-8 md:py-8">
+          <div className="flex-1 overflow-auto p-[var(--page-padding)]">
             <div className="space-y-8">
               {bundle?.messages.length || streamingText ? (
                 <>
@@ -323,7 +323,7 @@ export function ChatView() {
             </div>
           </div>
 
-          <footer className="border-t border-[var(--border)] px-5 py-5 md:px-8">
+          <footer className="border-t border-[var(--border)] p-[var(--page-padding)]">
             <div className="grid gap-3">
               <Input
                 value={message}

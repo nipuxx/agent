@@ -19,6 +19,8 @@ export interface NipuxTheme {
     muted: string;
     border: string;
     accent: string;
+    radius: string;
+    rail: string;
   };
 }
 
@@ -36,6 +38,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#a9a49a",
       border: "rgba(255,255,255,0.14)",
       accent: "#8abd6e",
+      radius: "8px",
+      rail: "64px",
     },
   },
   {
@@ -49,6 +53,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#6f675b",
       border: "rgba(21,19,15,0.2)",
       accent: "#111111",
+      radius: "2px",
+      rail: "70px",
     },
   },
   {
@@ -62,6 +68,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#64727a",
       border: "rgba(16,24,32,0.16)",
       accent: "#4d9ec6",
+      radius: "22px",
+      rail: "74px",
     },
   },
   {
@@ -75,6 +83,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#a8987e",
       border: "rgba(244,234,219,0.15)",
       accent: "#d49742",
+      radius: "0px",
+      rail: "58px",
     },
   },
   {
@@ -88,6 +98,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#94a1a9",
       border: "rgba(245,247,248,0.18)",
       accent: "#c9d7df",
+      radius: "24px",
+      rail: "78px",
     },
   },
   {
@@ -101,6 +113,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#8aa1b6",
       border: "rgba(96,190,225,0.22)",
       accent: "#60bee1",
+      radius: "4px",
+      rail: "66px",
     },
   },
   {
@@ -114,6 +128,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#9a9487",
       border: "rgba(235,228,210,0.14)",
       accent: "#76b66d",
+      radius: "10px",
+      rail: "86px",
     },
   },
   {
@@ -127,6 +143,8 @@ export const NIPUX_THEMES: NipuxTheme[] = [
       muted: "#9a9a9a",
       border: "rgba(247,247,247,0.16)",
       accent: "#42d9e8",
+      radius: "16px",
+      rail: "62px",
     },
   },
 ];

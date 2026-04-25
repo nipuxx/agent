@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 :root {
+  /*
+   * Theme edit surface:
+   * Each [data-theme] block controls palette plus geometry. Keep component
+   * edits minimal by changing these tokens first: radius, density, rail width,
+   * panel/card surfaces, control height, shadow, blur, and text treatment.
+   */
   --background: #101010;
   --body-background-image:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.025), transparent 28%),
@@ -26,6 +32,36 @@
   --active-surface: rgba(255, 255, 255, 0.035);
   --hover-surface: rgba(255, 255, 255, 0.02);
   --browser-backdrop: rgba(0, 0, 0, 0.2);
+  --rail-width: 64px;
+  --radius-panel: 8px;
+  --radius-card: 6px;
+  --radius-control: 6px;
+  --radius-frame: 10px;
+  --border-width: 1px;
+  --page-padding: 24px;
+  --panel-padding: 18px;
+  --card-padding: 16px;
+  --theme-tile-padding: 12px;
+  --theme-grid-gap: 14px;
+  --control-height: 42px;
+  --control-padding-x: 14px;
+  --rail-icon-size: 42px;
+  --panel-bg: rgba(18, 18, 18, 0.82);
+  --card-bg: rgba(255, 255, 255, 0.018);
+  --field-bg: rgba(255, 255, 255, 0.032);
+  --panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.18);
+  --card-shadow: none;
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: none;
+  --heading-letter-spacing: -0.065em;
+  --heading-weight: 500;
+  --label-letter-spacing: 0.18em;
+  --button-letter-spacing: 0.18em;
+  --input-letter-spacing: 0.01em;
+  --input-transform: none;
+  --divider-opacity: 1;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
 }
 
 :root[data-theme="paper-terminal"] {
@@ -55,6 +91,35 @@
   --active-surface: rgba(21, 19, 15, 0.06);
   --hover-surface: rgba(21, 19, 15, 0.04);
   --browser-backdrop: rgba(21, 19, 15, 0.08);
+  --rail-width: 70px;
+  --radius-panel: 2px;
+  --radius-card: 2px;
+  --radius-control: 2px;
+  --radius-frame: 2px;
+  --border-width: 1px;
+  --page-padding: 28px;
+  --panel-padding: 20px;
+  --card-padding: 18px;
+  --theme-tile-padding: 14px;
+  --theme-grid-gap: 16px;
+  --control-height: 44px;
+  --control-padding-x: 14px;
+  --rail-icon-size: 40px;
+  --panel-bg: rgba(247, 241, 230, 0.72);
+  --card-bg: rgba(255, 255, 255, 0.34);
+  --field-bg: rgba(255, 255, 255, 0.42);
+  --panel-shadow: 7px 7px 0 rgba(21, 19, 15, 0.08);
+  --card-shadow: 3px 3px 0 rgba(21, 19, 15, 0.06);
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: none;
+  --heading-letter-spacing: -0.045em;
+  --heading-weight: 560;
+  --label-letter-spacing: 0.16em;
+  --button-letter-spacing: 0.14em;
+  --input-letter-spacing: 0;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(21, 19, 15, 0.28);
 }
 
 :root[data-theme="arctic-lab"] {
@@ -84,6 +149,35 @@
   --active-surface: rgba(77, 158, 198, 0.11);
   --hover-surface: rgba(77, 158, 198, 0.07);
   --browser-backdrop: rgba(16, 24, 32, 0.08);
+  --rail-width: 74px;
+  --radius-panel: 22px;
+  --radius-card: 18px;
+  --radius-control: 999px;
+  --radius-frame: 26px;
+  --border-width: 1px;
+  --page-padding: 30px;
+  --panel-padding: 22px;
+  --card-padding: 18px;
+  --theme-tile-padding: 14px;
+  --theme-grid-gap: 18px;
+  --control-height: 46px;
+  --control-padding-x: 18px;
+  --rail-icon-size: 46px;
+  --panel-bg: rgba(248, 251, 252, 0.78);
+  --card-bg: rgba(255, 255, 255, 0.62);
+  --field-bg: rgba(255, 255, 255, 0.72);
+  --panel-shadow: 0 24px 70px rgba(77, 158, 198, 0.16);
+  --card-shadow: 0 16px 34px rgba(16, 24, 32, 0.07);
+  --control-shadow: 0 10px 22px rgba(77, 158, 198, 0.1);
+  --panel-blur: blur(14px);
+  --heading-transform: none;
+  --heading-letter-spacing: -0.055em;
+  --heading-weight: 520;
+  --label-letter-spacing: 0.12em;
+  --button-letter-spacing: 0.12em;
+  --input-letter-spacing: 0;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(16, 24, 32, 0.24);
 }
 
 :root[data-theme="amber-ops"] {
@@ -112,6 +206,35 @@
   --active-surface: rgba(212, 151, 66, 0.075);
   --hover-surface: rgba(212, 151, 66, 0.045);
   --browser-backdrop: rgba(0, 0, 0, 0.22);
+  --rail-width: 58px;
+  --radius-panel: 0px;
+  --radius-card: 0px;
+  --radius-control: 0px;
+  --radius-frame: 0px;
+  --border-width: 1px;
+  --page-padding: 20px;
+  --panel-padding: 16px;
+  --card-padding: 14px;
+  --theme-tile-padding: 10px;
+  --theme-grid-gap: 10px;
+  --control-height: 38px;
+  --control-padding-x: 12px;
+  --rail-icon-size: 38px;
+  --panel-bg: rgba(17, 13, 8, 0.62);
+  --card-bg: rgba(212, 151, 66, 0.028);
+  --field-bg: rgba(212, 151, 66, 0.035);
+  --panel-shadow: inset 0 0 0 1px rgba(212, 151, 66, 0.03);
+  --card-shadow: none;
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: uppercase;
+  --heading-letter-spacing: -0.025em;
+  --heading-weight: 640;
+  --label-letter-spacing: 0.2em;
+  --button-letter-spacing: 0.18em;
+  --input-letter-spacing: 0.06em;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(212, 151, 66, 0.26);
 }
 
 :root[data-theme="glass-console"] {
@@ -140,6 +263,35 @@
   --active-surface: rgba(245, 247, 248, 0.07);
   --hover-surface: rgba(245, 247, 248, 0.045);
   --browser-backdrop: rgba(255, 255, 255, 0.04);
+  --rail-width: 78px;
+  --radius-panel: 24px;
+  --radius-card: 18px;
+  --radius-control: 16px;
+  --radius-frame: 28px;
+  --border-width: 1px;
+  --page-padding: 28px;
+  --panel-padding: 22px;
+  --card-padding: 18px;
+  --theme-tile-padding: 14px;
+  --theme-grid-gap: 18px;
+  --control-height: 46px;
+  --control-padding-x: 16px;
+  --rail-icon-size: 46px;
+  --panel-bg: rgba(18, 23, 28, 0.56);
+  --card-bg: rgba(245, 247, 248, 0.055);
+  --field-bg: rgba(245, 247, 248, 0.065);
+  --panel-shadow: 0 30px 90px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --card-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --control-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --panel-blur: blur(20px);
+  --heading-transform: none;
+  --heading-letter-spacing: -0.07em;
+  --heading-weight: 470;
+  --label-letter-spacing: 0.14em;
+  --button-letter-spacing: 0.14em;
+  --input-letter-spacing: 0.01em;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(245, 247, 248, 0.22);
 }
 
 :root[data-theme="blueprint"] {
@@ -168,6 +320,35 @@
   --active-surface: rgba(96, 190, 225, 0.085);
   --hover-surface: rgba(96, 190, 225, 0.05);
   --browser-backdrop: rgba(96, 190, 225, 0.035);
+  --rail-width: 66px;
+  --radius-panel: 4px;
+  --radius-card: 3px;
+  --radius-control: 3px;
+  --radius-frame: 4px;
+  --border-width: 1px;
+  --page-padding: 24px;
+  --panel-padding: 18px;
+  --card-padding: 16px;
+  --theme-tile-padding: 12px;
+  --theme-grid-gap: 12px;
+  --control-height: 42px;
+  --control-padding-x: 13px;
+  --rail-icon-size: 42px;
+  --panel-bg: rgba(7, 18, 29, 0.72);
+  --card-bg: rgba(96, 190, 225, 0.03);
+  --field-bg: rgba(96, 190, 225, 0.045);
+  --panel-shadow: inset 0 0 0 1px rgba(96, 190, 225, 0.025), 0 0 44px rgba(96, 190, 225, 0.06);
+  --card-shadow: inset 0 0 18px rgba(96, 190, 225, 0.035);
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: uppercase;
+  --heading-letter-spacing: 0.015em;
+  --heading-weight: 620;
+  --label-letter-spacing: 0.22em;
+  --button-letter-spacing: 0.18em;
+  --input-letter-spacing: 0.04em;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(96, 190, 225, 0.3);
 }
 
 :root[data-theme="studio-dark"] {
@@ -194,6 +375,35 @@
   --active-surface: rgba(118, 182, 109, 0.095);
   --hover-surface: rgba(235, 228, 210, 0.045);
   --browser-backdrop: rgba(0, 0, 0, 0.14);
+  --rail-width: 86px;
+  --radius-panel: 10px;
+  --radius-card: 8px;
+  --radius-control: 8px;
+  --radius-frame: 12px;
+  --border-width: 1px;
+  --page-padding: 26px;
+  --panel-padding: 20px;
+  --card-padding: 16px;
+  --theme-tile-padding: 12px;
+  --theme-grid-gap: 14px;
+  --control-height: 44px;
+  --control-padding-x: 15px;
+  --rail-icon-size: 44px;
+  --panel-bg: rgba(48, 48, 46, 0.78);
+  --card-bg: rgba(235, 228, 210, 0.035);
+  --field-bg: rgba(235, 228, 210, 0.045);
+  --panel-shadow: none;
+  --card-shadow: none;
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: none;
+  --heading-letter-spacing: -0.055em;
+  --heading-weight: 430;
+  --label-letter-spacing: 0.11em;
+  --button-letter-spacing: 0.1em;
+  --input-letter-spacing: 0;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(235, 228, 210, 0.2);
 }
 
 :root[data-theme="synth-minimal"] {
@@ -222,6 +432,35 @@
   --active-surface: rgba(66, 217, 232, 0.075);
   --hover-surface: rgba(222, 75, 188, 0.045);
   --browser-backdrop: rgba(255, 255, 255, 0.035);
+  --rail-width: 62px;
+  --radius-panel: 16px;
+  --radius-card: 12px;
+  --radius-control: 12px;
+  --radius-frame: 18px;
+  --border-width: 1px;
+  --page-padding: 22px;
+  --panel-padding: 18px;
+  --card-padding: 16px;
+  --theme-tile-padding: 12px;
+  --theme-grid-gap: 12px;
+  --control-height: 42px;
+  --control-padding-x: 14px;
+  --rail-icon-size: 42px;
+  --panel-bg: rgba(13, 13, 13, 0.78);
+  --card-bg: rgba(255, 255, 255, 0.028);
+  --field-bg: rgba(255, 255, 255, 0.045);
+  --panel-shadow: 0 0 0 1px rgba(66, 217, 232, 0.03), 0 18px 60px rgba(222, 75, 188, 0.06);
+  --card-shadow: 0 0 28px rgba(66, 217, 232, 0.035);
+  --control-shadow: none;
+  --panel-blur: none;
+  --heading-transform: none;
+  --heading-letter-spacing: -0.07em;
+  --heading-weight: 520;
+  --label-letter-spacing: 0.16em;
+  --button-letter-spacing: 0.15em;
+  --input-letter-spacing: 0;
+  --input-transform: none;
+  --scrollbar-thumb: rgba(66, 217, 232, 0.25);
 }
 
 @theme inline {
@@ -278,11 +517,11 @@ select {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar-thumb);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--border-strong);
 }
 
 .nipux-mono {
@@ -293,12 +532,116 @@ select {
   font-family: var(--font-display), sans-serif;
 }
 
+.nipux-app {
+  --theme-safe-padding: max(14px, var(--page-padding));
+}
+
+.nipux-title {
+  font-weight: var(--heading-weight);
+  letter-spacing: var(--heading-letter-spacing);
+  text-transform: var(--heading-transform);
+}
+
+.nipux-label {
+  font-family: var(--font-mono-ui), monospace;
+  font-size: 11px;
+  letter-spacing: var(--label-letter-spacing);
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 .nipux-panel {
-  background: transparent;
-  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: var(--panel-blur);
 }
 
 .nipux-panel-soft {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: var(--panel-blur);
+}
+
+.nipux-card {
+  background: var(--card-bg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--card-shadow);
+}
+
+.nipux-control {
+  min-height: var(--control-height);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  box-shadow: var(--control-shadow);
+}
+
+.nipux-frame {
+  background: var(--panel-bg);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-frame);
+  box-shadow: var(--panel-shadow);
+  overflow: hidden;
+}
+
+.nipux-divider-bg {
+  background: color-mix(in srgb, var(--border) calc(var(--divider-opacity) * 100%), transparent);
+}
+
+.nipux-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--theme-grid-gap);
+}
+
+.nipux-theme-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: var(--theme-grid-gap);
+}
+
+.nipux-theme-tile {
+  padding: var(--theme-tile-padding);
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.nipux-theme-tile:hover {
+  border-color: var(--border-strong);
+  background: var(--hover-surface);
+  transform: translateY(-1px);
+}
+
+.nipux-theme-tile[data-active="true"] {
+  border-color: var(--border-strong);
+  background: var(--active-surface);
+}
+
+.nipux-preview {
+  border-radius: calc(var(--radius-card) * 0.78);
+}
+
+.nipux-app .border:not(.border-t):not(.border-r):not(.border-b):not(.border-l) {
+  border-width: var(--border-width);
+  border-radius: var(--radius-card);
+}
+
+.nipux-app .border-t,
+.nipux-app .border-r,
+.nipux-app .border-b,
+.nipux-app .border-l {
+  border-radius: 0;
 }

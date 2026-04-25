@@ -115,17 +115,17 @@ export function BrowserPane({
 
   return (
     <div
-      className={`grid h-full min-h-0 min-w-0 border border-[var(--border)] ${
+      className={`nipux-frame grid h-full min-h-0 min-w-0 ${
         showControls ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)_auto]"
       }`}
     >
       {showControls ? (
-        <div className="border-b border-[var(--border)] px-4 py-4">
+        <div className="border-b border-[var(--border)] p-[var(--panel-padding)]">
           <div className="flex items-center justify-between gap-3">
-            <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+            <div className="nipux-label">
               {title}
             </div>
-            <div className="nipux-mono text-[10px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+            <div className="nipux-label text-[10px]">
               {session?.control_mode === "manual" ? "manual" : "agent"}
             </div>
           </div>
@@ -133,7 +133,7 @@ export function BrowserPane({
       ) : null}
 
       {showControls ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_56px] gap-2 border-b border-[var(--border)] px-4 py-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_56px] gap-2 border-b border-[var(--border)] px-[var(--panel-padding)] py-3">
           <Input
             value={url}
             onChange={(event) => setUrl(event.target.value)}
@@ -163,7 +163,7 @@ export function BrowserPane({
         )}
       </div>
 
-      <div className="border-t border-[var(--border)] px-4 py-3">
+      <div className="border-t border-[var(--border)] px-[var(--panel-padding)] py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="truncate text-[14px] text-[var(--foreground)]/88">{session?.title || "No page loaded"}</div>
           {!showControls ? (

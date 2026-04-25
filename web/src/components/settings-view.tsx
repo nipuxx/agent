@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 
 function panelLabel(label: string) {
   return (
-    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="nipux-label">
       {label}
     </div>
   );
@@ -237,30 +237,30 @@ export function SettingsView() {
   return (
     <AppShell>
       <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="min-h-0 overflow-auto border-r border-[var(--border)] px-5 py-5 md:px-6">
-          <header className="border border-[var(--border)] px-5 py-5">
+        <main className="min-h-0 overflow-auto border-r border-[var(--border)] p-[var(--page-padding)]">
+          <header className="nipux-panel p-[var(--panel-padding)]">
             {panelLabel("settings")}
-            <div className="mt-3 text-[30px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+            <div className="nipux-title mt-3 text-[30px] text-[var(--foreground)]">
               Runtime and agent defaults
             </div>
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
-            <section className="border border-[var(--border)] px-4 py-4 xl:col-span-2">
+            <section className="nipux-panel p-[var(--panel-padding)] xl:col-span-2">
               {panelLabel("theme")}
               <div className="mt-4">
-                <ThemePicker value={themeChoice} onChange={setThemeChoice} />
+                <ThemePicker value={themeChoice} onChange={setThemeChoice} compact />
               </div>
             </section>
 
-            <section className="border border-[var(--border)] px-4 py-4">
+            <section className="nipux-panel p-[var(--panel-padding)]">
               {panelLabel("provider")}
               <div className="mt-4 grid gap-4">
                 <select
                   value={providerMode}
                   onChange={(event) => setProviderMode(event.target.value)}
-                  className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
+                  className="h-[var(--control-height)] rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--field-bg)] px-[var(--control-padding-x)] text-[14px] text-[var(--foreground)] shadow-[var(--control-shadow)] outline-none"
                 >
                   <option value="local" className="bg-[var(--background)]">Local runtime</option>
                   <option value="external" className="bg-[var(--background)]">External endpoint</option>
@@ -279,13 +279,13 @@ export function SettingsView() {
               </div>
             </section>
 
-            <section className="border border-[var(--border)] px-4 py-4">
+            <section className="nipux-panel p-[var(--panel-padding)]">
               {panelLabel("runtime")}
               <div className="mt-4 grid gap-4">
                 <select
                   value={preferredRuntime}
                   onChange={(event) => setPreferredRuntime(event.target.value)}
-                  className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
+                  className="h-[var(--control-height)] rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--field-bg)] px-[var(--control-padding-x)] text-[14px] text-[var(--foreground)] shadow-[var(--control-shadow)] outline-none"
                 >
                   {runtimeOptions.map((item) => (
                     <option key={item.id} value={item.id} className="bg-[var(--background)]">
@@ -297,7 +297,7 @@ export function SettingsView() {
                   <select
                     value={preferredModel}
                     onChange={(event) => setPreferredModel(event.target.value)}
-                    className="h-11 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none"
+                    className="h-[var(--control-height)] rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--field-bg)] px-[var(--control-padding-x)] text-[14px] text-[var(--foreground)] shadow-[var(--control-shadow)] outline-none"
                   >
                     {modelOptions.map((item) => (
                       <option key={item.id} value={item.id} className="bg-[var(--background)]">
@@ -310,7 +310,7 @@ export function SettingsView() {
             </section>
 
             {providerMode === "local" ? (
-              <section className="border border-[var(--border)] px-4 py-4 xl:col-span-2">
+              <section className="nipux-panel p-[var(--panel-padding)] xl:col-span-2">
               {panelLabel("custom model")}
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <Input value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} placeholder="Label" />
@@ -324,7 +324,7 @@ export function SettingsView() {
               </section>
             ) : null}
 
-            <section className="border border-[var(--border)] px-4 py-4">
+            <section className="nipux-panel p-[var(--panel-padding)]">
               {panelLabel("browser")}
               <div className="mt-4 grid gap-4">
                 <label className="flex items-center gap-3 text-[14px] text-[var(--foreground)]">
@@ -343,7 +343,7 @@ export function SettingsView() {
               </div>
             </section>
 
-            <section className="border border-[var(--border)] px-4 py-4">
+            <section className="nipux-panel p-[var(--panel-padding)]">
               {panelLabel("limits")}
               <div className="mt-4 grid gap-4">
                 <Input value={actionBudget} onChange={(event) => setActionBudget(event.target.value)} placeholder="Worker action budget" />
@@ -352,7 +352,7 @@ export function SettingsView() {
               </div>
             </section>
 
-            <section className="border border-[var(--border)] px-4 py-4 xl:col-span-2">
+            <section className="nipux-panel p-[var(--panel-padding)] xl:col-span-2">
               {panelLabel("workspace")}
               <div className="mt-4 grid gap-4">
                 <Input value={workspaceRoot} onChange={(event) => setWorkspaceRoot(event.target.value)} placeholder="Workspace root" />
@@ -390,8 +390,8 @@ export function SettingsView() {
           </div>
         </main>
 
-        <aside className="min-h-0 overflow-auto px-5 py-5 md:px-6">
-          <div className="border border-[var(--border)] px-4 py-4">
+        <aside className="min-h-0 overflow-auto p-[var(--page-padding)]">
+          <div className="nipux-panel p-[var(--panel-padding)]">
             {panelLabel("actions")}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" onClick={() => void handleSave()} disabled={pending}>
@@ -410,7 +410,7 @@ export function SettingsView() {
             </div>
           </div>
 
-          <div className="mt-5 border border-[var(--border)] px-4 py-4">
+          <div className="nipux-panel mt-5 p-[var(--panel-padding)]">
             {panelLabel("status")}
             <div className="mt-4 space-y-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
               <div>Setup: {summary.settings.setup_completed ? "complete" : "incomplete"}</div>
@@ -421,7 +421,7 @@ export function SettingsView() {
             </div>
           </div>
 
-          <div className="mt-5 border border-[var(--border)] px-4 py-4">
+          <div className="nipux-panel mt-5 p-[var(--panel-padding)]">
             {panelLabel("install log")}
             <div className="mt-4 space-y-3 nipux-mono text-[12px] leading-[1.7] text-[var(--foreground)]/84">
               {taskLogs.length ? taskLogs.slice(-16).map((line, index) => <div key={`${line}-${index}`}>{line}</div>) : <div>No active install task.</div>}

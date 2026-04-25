@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 
 function panelLabel(label: string) {
   return (
-    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="nipux-label">
       {label}
     </div>
   );
@@ -230,11 +230,11 @@ export function AgentsView() {
         style={{ ["--browser-width" as string]: `${browserWidth}px` }}
       >
         <aside className="min-h-0 border-r border-[var(--border)]">
-          <div className="border-b border-[var(--border)] px-5 py-5">
+          <div className="border-b border-[var(--border)] p-[var(--page-padding)]">
             <div className="flex items-center justify-between gap-3">
               <div>
                 {panelLabel("agents")}
-                <div className="mt-3 text-[24px] font-medium tracking-[-0.05em] text-[var(--foreground)]">Workers</div>
+                <div className="nipux-title mt-3 text-[24px] text-[var(--foreground)]">Workers</div>
               </div>
               <Button size="sm" onClick={() => void handleCreate()} disabled={pending}>
                 New
@@ -257,7 +257,7 @@ export function AgentsView() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-[18px] font-medium tracking-[-0.04em] text-[var(--foreground)]">
+                        <div className="nipux-title truncate text-[18px] text-[var(--foreground)]">
                           {agent.name}
                         </div>
                         <div className="mt-2 text-[13px] leading-[1.6] text-[var(--muted-foreground)]">
@@ -278,11 +278,11 @@ export function AgentsView() {
         </aside>
 
         <main className="min-h-0 overflow-auto border-r border-[var(--border)]">
-          <header className="border-b border-[var(--border)] px-6 py-5 md:px-8">
+          <header className="border-b border-[var(--border)] p-[var(--page-padding)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 {panelLabel("selected agent")}
-                <h1 className="mt-3 text-[34px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
+                <h1 className="nipux-title mt-3 text-[34px] text-[var(--foreground)]">
                   {selectedAgent?.name ?? "No agent"}
                 </h1>
                 <p className="mt-3 max-w-[760px] text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
@@ -303,9 +303,9 @@ export function AgentsView() {
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
-          <div className="grid h-[calc(100vh-120px)] min-h-0 gap-5 px-6 py-5 md:px-8">
+          <div className="grid h-[calc(100vh-120px)] min-h-0 gap-5 p-[var(--page-padding)]">
             <div className="grid min-h-0 gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
-              <div className="min-h-0 border border-[var(--border)]">
+              <div className="nipux-panel min-h-0 overflow-hidden">
                 <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
                   {panelLabel("threads")}
                   <Button variant="outline" size="sm" onClick={() => void handleNewThread()} disabled={!selectedAgent || pending}>
@@ -337,13 +337,13 @@ export function AgentsView() {
                 </div>
               </div>
 
-              <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] border border-[var(--border)]">
-                <div className="overflow-auto px-4 py-4">
+              <div className="nipux-panel grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+                <div className="overflow-auto p-[var(--panel-padding)]">
                   <div className="space-y-5">
                     {bundle?.messages.length || pendingMessages.length ? (
                       <>
                         {(bundle?.messages ?? []).map((message) => (
-                          <div key={message.id} className={message.role === "assistant" ? "border border-[var(--border)] px-4 py-4" : ""}>
+                          <div key={message.id} className={message.role === "assistant" ? "nipux-card p-[var(--card-padding)]" : ""}>
                             <div className="text-[14px] leading-[1.8] text-[var(--foreground)]/88">{message.body}</div>
                           </div>
                         ))}
@@ -360,7 +360,7 @@ export function AgentsView() {
                     )}
                   </div>
                 </div>
-                <div className="border-t border-[var(--border)] px-4 py-4">
+                <div className="border-t border-[var(--border)] p-[var(--panel-padding)]">
                   <div className="grid gap-3">
                     <Input
                       value={agentMessage}

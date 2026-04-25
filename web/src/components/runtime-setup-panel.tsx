@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 
 function panelLabel(label: string) {
   return (
-    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="nipux-label">
       {label}
     </div>
   );
@@ -41,7 +41,7 @@ function OptionTile({
     <button
       type="button"
       onClick={onClick}
-      className={`border px-4 py-4 text-left transition-colors ${
+      className={`nipux-card p-[var(--card-padding)] text-left transition-colors ${
         active
           ? "border-[var(--border-strong)] bg-[var(--active-surface)]"
           : "border-[var(--border)] bg-transparent hover:border-[var(--border-strong)]"
@@ -54,7 +54,7 @@ function OptionTile({
 }
 
 function selectClassName() {
-  return "h-12 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none";
+  return "h-[var(--control-height)] rounded-[var(--radius-control)] border border-[var(--border)] bg-[var(--field-bg)] px-[var(--control-padding-x)] text-[14px] text-[var(--foreground)] shadow-[var(--control-shadow)] outline-none";
 }
 
 const STEPS = ["Theme", "Provider", "Runtime", "Review"];
@@ -348,11 +348,11 @@ export function RuntimeSetupPanel({
   return (
     <div className="grid h-full min-h-[620px] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className="flex min-h-0 flex-col">
-        <header className="border-b border-[var(--border)] px-5 py-5 md:px-6">
+        <header className="border-b border-[var(--border)] p-[var(--page-padding)]">
           <div className="flex items-center justify-between gap-4">
             <div>
               {panelLabel("guided setup")}
-              <div className="mt-3 text-[24px] font-medium tracking-[-0.06em] text-[var(--foreground)] md:text-[34px]">
+              <div className="nipux-title mt-3 text-[24px] text-[var(--foreground)] md:text-[34px]">
                 {STEPS[step]}
               </div>
             </div>
@@ -368,7 +368,7 @@ export function RuntimeSetupPanel({
                       index <= step ? "bg-[var(--foreground)]" : "bg-[var(--foreground)]/16"
                     }`}
                   />
-                  <div className="nipux-mono text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                  <div className="nipux-label text-[10px]">
                     {label}
                   </div>
                 </div>
@@ -378,10 +378,10 @@ export function RuntimeSetupPanel({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-5 md:px-6">
+        <div className="min-h-0 flex-1 overflow-auto p-[var(--page-padding)]">
           {step === 0 ? (
             <div className="space-y-5">
-              <div className="border border-[var(--border)] px-4 py-4">
+              <div className="nipux-panel p-[var(--panel-padding)]">
                 {panelLabel("visual system")}
                 <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                   Pick the interface style for this machine. It can be changed later from Settings.
@@ -406,7 +406,7 @@ export function RuntimeSetupPanel({
                 onClick={() => setProviderMode("external")}
               />
 
-              <div className="border border-[var(--border)] px-4 py-4">
+              <div className="nipux-panel p-[var(--panel-padding)]">
                 {panelLabel("workspace")}
                 <div className="mt-3 space-y-3">
                   <Input
@@ -426,7 +426,7 @@ export function RuntimeSetupPanel({
                 </div>
               </div>
 
-              <div className="border border-[var(--border)] px-4 py-4">
+              <div className="nipux-panel p-[var(--panel-padding)]">
                 {panelLabel("recommended")}
                 <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                   Use Carnice locally if you want the default path. If you need a different model, choose
@@ -440,7 +440,7 @@ export function RuntimeSetupPanel({
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-5">
                 {providerMode === "external" ? (
-                  <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                  <div className="nipux-panel grid gap-4 p-[var(--panel-padding)]">
                     {panelLabel("endpoint")}
                     <Input
                       value={endpoint}
@@ -460,7 +460,7 @@ export function RuntimeSetupPanel({
                   </div>
                 ) : (
                   <>
-                    <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                    <div className="nipux-panel grid gap-4 p-[var(--panel-padding)]">
                       {panelLabel("runtime")}
                       <select
                         value={runtimeChoice}
@@ -475,7 +475,7 @@ export function RuntimeSetupPanel({
                       </select>
                     </div>
 
-                    <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                    <div className="nipux-panel grid gap-4 p-[var(--panel-padding)]">
                       {panelLabel("model")}
                       <select
                         value={modelChoice}
@@ -518,7 +518,7 @@ export function RuntimeSetupPanel({
                 )}
               </div>
 
-              <aside className="border border-[var(--border)] px-4 py-4">
+              <aside className="nipux-panel p-[var(--panel-padding)]">
                 {panelLabel("selection")}
                 <div className="mt-4 space-y-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                   <div>Mode: {providerMode === "local" ? "Local runtime" : "External endpoint"}</div>
@@ -563,22 +563,22 @@ export function RuntimeSetupPanel({
           {step === 3 ? (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="space-y-5">
-                <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                <div className="nipux-panel grid gap-4 p-[var(--panel-padding)]">
                   {panelLabel("review")}
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="border border-[var(--border)] px-4 py-4">
+                    <div className="nipux-card p-[var(--card-padding)]">
                       <div className="text-[14px] text-[var(--foreground)]">Theme</div>
                       <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                         {themeById(themeChoice).label}
                       </div>
                     </div>
-                    <div className="border border-[var(--border)] px-4 py-4">
+                    <div className="nipux-card p-[var(--card-padding)]">
                       <div className="text-[14px] text-[var(--foreground)]">Provider</div>
                       <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                         {providerMode === "local" ? "Local runtime" : "External endpoint"}
                       </div>
                     </div>
-                    <div className="border border-[var(--border)] px-4 py-4">
+                    <div className="nipux-card p-[var(--card-padding)]">
                       <div className="text-[14px] text-[var(--foreground)]">Workspace</div>
                       <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                         {workspaceRoot || "Default workspace"}
@@ -586,13 +586,13 @@ export function RuntimeSetupPanel({
                     </div>
                     {providerMode === "local" ? (
                       <>
-                        <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="nipux-card p-[var(--card-padding)]">
                           <div className="text-[14px] text-[var(--foreground)]">Runtime</div>
                           <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                             {selectedRuntime?.label ?? "Not selected"}
                           </div>
                         </div>
-                        <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="nipux-card p-[var(--card-padding)]">
                           <div className="text-[14px] text-[var(--foreground)]">Model</div>
                           <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                             {selectedModel ? modelLabel(selectedModel) : "Not selected"}
@@ -601,13 +601,13 @@ export function RuntimeSetupPanel({
                       </>
                     ) : (
                       <>
-                        <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="nipux-card p-[var(--card-padding)]">
                           <div className="text-[14px] text-[var(--foreground)]">Endpoint</div>
                           <div className="mt-2 break-all text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                             {endpoint || "Not set"}
                           </div>
                         </div>
-                        <div className="border border-[var(--border)] px-4 py-4">
+                        <div className="nipux-card p-[var(--card-padding)]">
                           <div className="text-[14px] text-[var(--foreground)]">Model</div>
                           <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                             {modelName || "Not set"}
@@ -619,22 +619,22 @@ export function RuntimeSetupPanel({
                 </div>
 
                 {providerMode === "local" ? (
-                  <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
+                  <div className="nipux-panel grid gap-4 p-[var(--panel-padding)]">
                     {panelLabel("provisioning")}
                     <div className="grid gap-3 md:grid-cols-3">
-                      <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="nipux-card p-[var(--card-padding)]">
                         <div className="text-[14px] text-[var(--foreground)]">Runtime install</div>
                         <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
                           {summary.runtime_state.runtime_installed ? "Ready" : "Pending"}
                         </div>
                       </div>
-                      <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="nipux-card p-[var(--card-padding)]">
                         <div className="text-[14px] text-[var(--foreground)]">Model payload</div>
                         <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
                           {summary.runtime_state.model_available && selectionMatchesConfigured ? "Ready" : "Pending"}
                         </div>
                       </div>
-                      <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="nipux-card p-[var(--card-padding)]">
                         <div className="text-[14px] text-[var(--foreground)]">Runtime health</div>
                         <div className="mt-2 text-[13px] text-[var(--muted-foreground)]">
                           {summary.runtime_state.model_loaded && canEnterDashboard ? "Running" : "Not live"}
@@ -645,7 +645,7 @@ export function RuntimeSetupPanel({
                 ) : null}
               </div>
 
-              <aside className="border border-[var(--border)] px-4 py-4">
+              <aside className="nipux-panel p-[var(--panel-padding)]">
                 {panelLabel("status")}
                 <div className="mt-4 space-y-4">
                   {providerMode === "local" ? (
@@ -660,7 +660,7 @@ export function RuntimeSetupPanel({
                   )}
 
                   {summary.runtime_plan.install_plan.warnings.length ? (
-                    <div className="border border-[var(--border)] px-4 py-4 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                    <div className="nipux-card p-[var(--card-padding)] text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
                       {summary.runtime_plan.install_plan.warnings.map((warning) => (
                         <div key={warning}>{warning}</div>
                       ))}
@@ -668,7 +668,7 @@ export function RuntimeSetupPanel({
                   ) : null}
 
                   {actionError || summary.runtime_state.last_error ? (
-                    <div className="border border-[var(--danger)]/45 px-4 py-4 text-[13px] leading-[1.7] text-[var(--danger)]">
+                    <div className="rounded-[var(--radius-card)] border border-[var(--danger)]/45 p-[var(--card-padding)] text-[13px] leading-[1.7] text-[var(--danger)]">
                       {actionError || summary.runtime_state.last_error}
                     </div>
                   ) : null}
@@ -692,7 +692,7 @@ export function RuntimeSetupPanel({
           ) : null}
         </div>
 
-        <footer className="flex items-center justify-between border-t border-[var(--border)] px-5 py-4 md:px-6">
+        <footer className="flex items-center justify-between border-t border-[var(--border)] px-[var(--page-padding)] py-4">
           <div className="flex items-center gap-3">
             <Button
               variant="outline"

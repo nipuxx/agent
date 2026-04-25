@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "nipux-mono inline-flex items-center justify-center gap-2 whitespace-nowrap border text-[11px] uppercase tracking-[0.2em] transition-colors disabled:pointer-events-none disabled:opacity-50 outline-none",
+  "nipux-mono inline-flex items-center justify-center gap-2 whitespace-nowrap border text-[11px] uppercase tracking-[var(--button-letter-spacing)] rounded-[var(--radius-control)] shadow-[var(--control-shadow)] transition-colors disabled:pointer-events-none disabled:opacity-50 outline-none",
   {
     variants: {
       variant: {
@@ -17,10 +17,10 @@ const buttonVariants = cva(
         ghost: "border-transparent bg-transparent text-[var(--muted-foreground)] hover:border-[var(--border)] hover:bg-[var(--surface-2)] hover:text-[var(--foreground)]",
       },
       size: {
-        default: "h-11 px-5 py-2",
-        sm: "h-9 px-3",
-        lg: "h-12 px-7",
-        icon: "h-11 w-11",
+        default: "h-[var(--control-height)] px-[var(--control-padding-x)] py-2",
+        sm: "h-[calc(var(--control-height)_-_6px)] px-3",
+        lg: "h-[calc(var(--control-height)_+_6px)] px-7",
+        icon: "h-[var(--control-height)] w-[var(--control-height)]",
       },
     },
     defaultVariants: {

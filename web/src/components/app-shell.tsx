@@ -29,7 +29,7 @@ function RailLink({
       href={href}
       aria-label={label}
       className={cn(
-        "flex h-10 w-10 items-center justify-center border text-[var(--muted-foreground)] transition-colors",
+        "flex h-[var(--rail-icon-size)] w-[var(--rail-icon-size)] items-center justify-center rounded-[var(--radius-control)] border text-[var(--muted-foreground)] transition-colors",
         active
           ? "border-[var(--border)] bg-[var(--active-surface)] text-[var(--foreground)]"
           : "border-transparent hover:border-[var(--border)] hover:bg-[var(--hover-surface)] hover:text-[var(--foreground)]",
@@ -48,12 +48,12 @@ export function AppShell({
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="grid min-h-screen grid-cols-[60px_minmax(0,1fr)]">
+    <div className="nipux-app min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <div className="grid min-h-screen" style={{ gridTemplateColumns: "var(--rail-width) minmax(0, 1fr)" }}>
         <aside className="relative flex flex-col border-r border-[var(--border)] bg-[var(--rail)]">
           <div className="absolute inset-y-0 left-0 w-px bg-[var(--rail-stripe)]" />
 
-          <div className="flex h-[52px] items-center justify-center border-b border-[var(--border)]">
+          <div className="flex h-[calc(var(--rail-width)_-_8px)] min-h-[52px] items-center justify-center border-b border-[var(--border)]">
             <Image
               src="/nipux-logo.png"
               alt="Nipux"

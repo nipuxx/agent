@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 
 function panelLabel(label: string) {
   return (
-    <div className="nipux-mono text-[11px] uppercase tracking-[0.18em] text-[var(--muted-foreground)]">
+    <div className="nipux-label">
       {label}
     </div>
   );
@@ -44,12 +44,12 @@ export function SetupView() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-5 py-5 md:px-8 md:py-8">
-        <header className="flex items-center justify-between border border-[var(--border)] px-5 py-4 md:px-6">
+    <div className="nipux-app min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col p-[var(--page-padding)]">
+        <header className="nipux-panel flex items-center justify-between px-[var(--panel-padding)] py-4">
           <div>
             {panelLabel("nipux setup")}
-            <div className="mt-3 text-[30px] font-medium tracking-[-0.08em] text-[var(--foreground)] md:text-[42px]">
+            <div className="nipux-title mt-3 text-[30px] text-[var(--foreground)] md:text-[42px]">
               Bring the runtime online.
             </div>
           </div>
@@ -63,7 +63,7 @@ export function SetupView() {
             {summary.settings.setup_completed ? (
               <Link
                 href="/dashboard"
-                className="inline-flex h-10 items-center gap-2 border border-[var(--border)] px-4 text-[13px] text-[var(--foreground)] transition-colors hover:border-[var(--border-strong)]"
+                className="inline-flex h-[var(--control-height)] items-center gap-2 rounded-[var(--radius-control)] border border-[var(--border)] px-[var(--control-padding-x)] text-[13px] text-[var(--foreground)] transition-colors hover:border-[var(--border-strong)]"
               >
                 Dashboard
                 <ArrowRight className="h-4 w-4" />
@@ -73,14 +73,14 @@ export function SetupView() {
         </header>
 
         <div className="mt-5 grid min-h-0 flex-1 gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="flex min-h-[320px] flex-col justify-between border border-[var(--border)] px-5 py-5 md:px-6">
+          <aside className="nipux-panel flex min-h-[320px] flex-col justify-between p-[var(--panel-padding)]">
             <div>
               {panelLabel("flow")}
               <div className="mt-6 space-y-4">
                 {STEPS.map((step, index) => (
                   <div key={step} className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className="flex h-7 w-7 items-center justify-center border border-[var(--border)] text-[12px] text-[var(--foreground)]">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] border border-[var(--border)] text-[12px] text-[var(--foreground)]">
                         {index + 1}
                       </div>
                       {index < STEPS.length - 1 ? (
@@ -93,7 +93,7 @@ export function SetupView() {
               </div>
             </div>
 
-            <div className="border border-[var(--border)] px-4 py-4">
+            <div className="nipux-card p-[var(--card-padding)]">
               <div className="flex items-center gap-3">
                 <Sparkles className="h-4 w-4 text-[var(--foreground)]" />
                 <div className="text-[14px] text-[var(--foreground)]">Recommended today</div>
@@ -105,7 +105,7 @@ export function SetupView() {
             </div>
           </aside>
 
-          <main className="min-h-[620px] border border-[var(--border)]">
+          <main className="nipux-frame min-h-[620px]">
             <RuntimeSetupPanel
               summary={summary}
               refresh={refresh}
@@ -114,12 +114,12 @@ export function SetupView() {
           </main>
         </div>
 
-        <footer className="mt-5 flex items-center justify-between border border-[var(--border)] px-5 py-4 text-[12px] text-[var(--muted-foreground)] md:px-6">
+        <footer className="nipux-panel mt-5 flex items-center justify-between px-[var(--panel-padding)] py-4 text-[12px] text-[var(--muted-foreground)]">
           <div className="flex items-center gap-2">
             <Check className="h-3.5 w-3.5" />
             Setup is the only place that installs or starts a runtime.
           </div>
-          <div className="nipux-mono uppercase tracking-[0.16em]">
+          <div className="nipux-label">
             Configure once, then work from Dashboard, Chats, and Agents.
           </div>
         </footer>
