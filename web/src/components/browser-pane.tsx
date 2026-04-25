@@ -146,7 +146,7 @@ export function BrowserPane({
         </div>
       ) : null}
 
-      <div className={`min-h-0 bg-black/20 ${compact ? "min-h-[340px]" : "min-h-[520px]"}`}>
+      <div className={`min-h-0 bg-[var(--browser-backdrop)] ${compact ? "min-h-[340px]" : "min-h-[520px]"}`}>
         {frameSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -196,7 +196,7 @@ export function BrowserPane({
             Manual control is active. Click inside the browser frame to drive it.
           </div>
         ) : null}
-        {error ? <div className="mt-2 text-[13px] text-[#d8a499]">{error}</div> : null}
+        {error ? <div className="mt-2 text-[13px] text-[var(--danger)]">{error}</div> : null}
       </div>
     </div>
   );

@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./app-shell";
+import { ThemePicker } from "./theme-picker";
 import { getInstallTask, installRuntime, saveSettings, startRuntime, stopRuntime } from "@/lib/api";
+import { DEFAULT_THEME_ID, applyTheme, themeById } from "@/lib/themes";
 import { useLiveSummary } from "@/lib/use-live-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +20,8 @@ function panelLabel(label: string) {
 
 export function SettingsView() {
   const { summary, loading, error, refresh } = useLiveSummary();
+  const [themeChoice, setThemeChoice] = useState<string>(DEFAULT_THEME_ID);
+  const [hydratedKey, setHydratedKey] = useState("");
   const [preferredRuntime, setPreferredRuntime] = useState("");
   const [preferredModel, setPreferredModel] = useState("");
   const [providerMode, setProviderMode] = useState("local");
@@ -44,9 +48,43 @@ export function SettingsView() {
 
   const runtimeOptions = useMemo(() => summary?.runtime_plan.runtime_options ?? [], [summary?.runtime_plan.runtime_options]);
   const modelOptions = useMemo(() => summary?.runtime_plan.model_options ?? [], [summary?.runtime_plan.model_options]);
+  const settingsKey = useMemo(
+    () =>
+      summary
+        ? JSON.stringify({
+            theme_id: summary.settings.theme_id,
+            preferred_runtime_id: summary.settings.preferred_runtime_id,
+            preferred_model_id: summary.settings.preferred_model_id,
+            provider_mode: summary.settings.provider_mode,
+            openai_base_url: summary.settings.openai_base_url,
+            openai_api_key: summary.settings.openai_api_key,
+            openai_model: summary.settings.openai_model,
+            worker_action_budget: summary.settings.worker_action_budget,
+            checkpoint_every_actions: summary.settings.checkpoint_every_actions,
+            max_runtime_minutes: summary.settings.max_runtime_minutes,
+            workspace_root: summary.settings.workspace_root,
+            browser_headless: summary.settings.browser_headless,
+            browser_viewport: summary.settings.browser_viewport,
+            allow_terminal: summary.settings.allow_terminal,
+            allow_browser: summary.settings.allow_browser,
+            allow_file_tools: summary.settings.allow_file_tools,
+            custom_model_name: summary.settings.custom_model_name,
+            custom_model_repo: summary.settings.custom_model_repo,
+            custom_model_filename: summary.settings.custom_model_filename,
+            custom_model_size_gb: summary.settings.custom_model_size_gb,
+            runtime_id: summary.runtime_plan.runtime.id,
+            recommended_model_id: summary.runtime_plan.recommendation.selected_model_id,
+          })
+        : "",
+    [summary],
+  );
 
   useEffect(() => {
     if (!summary) return;
+    if (hydratedKey === settingsKey) return;
+    const nextTheme = themeById(summary.settings.theme_id).id;
+    setThemeChoice(nextTheme);
+    applyTheme(nextTheme);
     setPreferredRuntime(summary.settings.preferred_runtime_id || summary.runtime_plan.runtime.id);
     setPreferredModel(summary.settings.preferred_model_id || summary.runtime_plan.recommendation.selected_model_id || "");
     setProviderMode(summary.settings.provider_mode);
@@ -67,7 +105,8 @@ export function SettingsView() {
     setCustomModelRepo(summary.settings.custom_model_repo);
     setCustomModelFilename(summary.settings.custom_model_filename);
     setCustomModelSizeGb(summary.settings.custom_model_size_gb ? String(summary.settings.custom_model_size_gb) : "");
-  }, [summary]);
+    setHydratedKey(settingsKey);
+  }, [hydratedKey, settingsKey, summary]);
 
   useEffect(() => {
     const taskId = summary?.runtime_state.install_task_id;
@@ -96,6 +135,7 @@ export function SettingsView() {
   async function persistSettings() {
     return saveSettings({
       provider_mode: providerMode,
+      theme_id: themeChoice,
       openai_base_url: endpoint,
       openai_api_key: apiKey,
       openai_model: modelName,
@@ -203,10 +243,17 @@ export function SettingsView() {
             <div className="mt-3 text-[30px] font-medium tracking-[-0.06em] text-[var(--foreground)]">
               Runtime and agent defaults
             </div>
-            {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
+            {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <section className="border border-[var(--border)] px-4 py-4 xl:col-span-2">
+              {panelLabel("theme")}
+              <div className="mt-4">
+                <ThemePicker value={themeChoice} onChange={setThemeChoice} />
+              </div>
+            </section>
+
             <section className="border border-[var(--border)] px-4 py-4">
               {panelLabel("provider")}
               <div className="mt-4 grid gap-4">

@@ -128,7 +128,7 @@ export function DashboardView() {
               <Stat label="Throughput" value={`${summary.telemetry.total_throughput_tps.toFixed(1)} tok/s`} />
             </div>
             <div className="bg-[var(--background)] px-5 py-5 md:px-6">
-              <Stat label="Money saved" value={formattedSavings} valueClassName="text-[#8abd6e]" />
+              <Stat label="Money saved" value={formattedSavings} valueClassName="text-[var(--success)]" />
             </div>
           </div>
 
@@ -224,11 +224,11 @@ export function DashboardView() {
                     key={line.id}
                     className={
                       line.level === "error"
-                        ? "text-[#d8a499]"
+                        ? "text-[var(--danger)]"
                         : line.event_type.startsWith("message.")
-                          ? "text-[#9dc1ff]"
+                          ? "text-[var(--accent)]"
                           : line.event_type.startsWith("agent.")
-                            ? "text-[#8abd6e]"
+                            ? "text-[var(--success)]"
                             : "text-[var(--foreground)]/78"
                     }
                   >

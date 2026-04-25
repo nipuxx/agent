@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { getSummary, openEventStream } from "./api";
 import type { NipuxSummary } from "./types";
+import { applyTheme } from "./themes";
 
 
 export function useLiveSummary() {
@@ -56,6 +57,12 @@ export function useLiveSummary() {
       stream.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (summary?.settings.theme_id) {
+      applyTheme(summary.settings.theme_id);
+    }
+  }, [summary?.settings.theme_id]);
 
   return { summary, loading, error, refresh };
 }

@@ -33,7 +33,7 @@ function MessageBlock({
     <div
       className={cn(
         "max-w-[920px] border px-4 py-4",
-        assistant ? "border-[var(--border)] bg-white/[0.02]" : "border-transparent bg-transparent px-0",
+        assistant ? "border-[var(--border)] bg-[var(--surface)]" : "border-transparent bg-transparent px-0",
       )}
     >
       <div className="nipux-mono text-[11px] tracking-[0.08em] text-[var(--muted-foreground)] capitalize">
@@ -259,7 +259,7 @@ export function ChatView() {
                       onClick={() => setSelectedThreadId(thread.id)}
                       className={cn(
                         "w-full border-b border-[var(--border)] text-left transition-colors",
-                        active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]",
+                        active ? "bg-[var(--active-surface)]" : "hover:bg-[var(--hover-surface)]",
                         sidebarCollapsed ? "px-2 py-3" : "px-4 py-4",
                       )}
                     >
@@ -300,7 +300,7 @@ export function ChatView() {
                 </p>
               </div>
             </div>
-            {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
+            {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
           <div className="flex-1 overflow-auto px-5 py-6 md:px-8 md:py-8">

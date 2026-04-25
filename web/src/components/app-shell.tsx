@@ -31,8 +31,8 @@ function RailLink({
       className={cn(
         "flex h-10 w-10 items-center justify-center border text-[var(--muted-foreground)] transition-colors",
         active
-          ? "border-white/10 bg-white/[0.035] text-[color:rgba(241,238,231,0.86)]"
-          : "border-transparent hover:border-white/10 hover:bg-white/[0.02] hover:text-[color:rgba(241,238,231,0.78)]",
+          ? "border-[var(--border)] bg-[var(--active-surface)] text-[var(--foreground)]"
+          : "border-transparent hover:border-[var(--border)] hover:bg-[var(--hover-surface)] hover:text-[var(--foreground)]",
       )}
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
@@ -50,8 +50,8 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <div className="grid min-h-screen grid-cols-[60px_minmax(0,1fr)]">
-        <aside className="relative flex flex-col border-r border-[var(--border)] bg-black/30">
-          <div className="absolute inset-y-0 left-0 w-px bg-[#5f56d9]" />
+        <aside className="relative flex flex-col border-r border-[var(--border)] bg-[var(--rail)]">
+          <div className="absolute inset-y-0 left-0 w-px bg-[var(--rail-stripe)]" />
 
           <div className="flex h-[52px] items-center justify-center border-b border-[var(--border)]">
             <Image

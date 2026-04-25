@@ -252,7 +252,7 @@ export function AgentsView() {
                     type="button"
                     onClick={() => setSelectedId(agent.id)}
                     className={`w-full border-b border-[var(--border)] px-3 py-4 text-left transition-colors ${
-                      active ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                      active ? "bg-[var(--active-surface)]" : "hover:bg-[var(--hover-surface)]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -300,7 +300,7 @@ export function AgentsView() {
                 </div>
               ) : null}
             </div>
-            {actionError ? <p className="mt-4 text-[14px] text-[#d8a499]">{actionError}</p> : null}
+            {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
           <div className="grid h-[calc(100vh-120px)] min-h-0 gap-5 px-6 py-5 md:px-8">
@@ -320,7 +320,7 @@ export function AgentsView() {
                         type="button"
                         onClick={() => setSelectedThreadId(thread.id)}
                         className={`w-full border-b border-[var(--border)] px-3 py-3 text-left transition-colors ${
-                          thread.id === selectedThreadId ? "bg-white/[0.03]" : "hover:bg-white/[0.02]"
+                          thread.id === selectedThreadId ? "bg-[var(--active-surface)]" : "hover:bg-[var(--hover-surface)]"
                         }`}
                       >
                         <div className="truncate text-[14px] text-[var(--foreground)]">{thread.title}</div>
@@ -390,7 +390,7 @@ export function AgentsView() {
         </main>
 
         <div
-          className="hidden xl:block cursor-col-resize bg-[var(--border)] transition-colors hover:bg-white/20"
+          className="hidden xl:block cursor-col-resize bg-[var(--border)] transition-colors hover:bg-[var(--border-strong)]"
           onMouseDown={(event) => {
             resizeRef.current = { startX: event.clientX, startWidth: browserWidth };
             document.body.style.cursor = "col-resize";

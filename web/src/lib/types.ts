@@ -122,6 +122,7 @@ export interface RuntimePlan {
 
 export interface NipuxSettings {
   setup_completed: boolean;
+  theme_id: string;
   provider_mode: string;
   openai_base_url: string;
   openai_api_key?: string;
@@ -339,6 +340,7 @@ export interface NipuxSummary {
 
 export interface SettingsUpdate {
   setup_completed?: boolean;
+  theme_id?: string;
   provider_mode?: string;
   openai_base_url?: string;
   openai_api_key?: string;

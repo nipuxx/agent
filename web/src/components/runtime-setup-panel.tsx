@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ExternalLink } from "lucide-react";
 
 import { getInstallTask, installRuntime, saveSettings, startRuntime } from "@/lib/api";
+import { ThemePicker } from "@/components/theme-picker";
+import { DEFAULT_THEME_ID, applyTheme, themeById } from "@/lib/themes";
 import type { NipuxSummary, RuntimeModel, SettingsUpdate } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,7 +43,7 @@ function OptionTile({
       onClick={onClick}
       className={`border px-4 py-4 text-left transition-colors ${
         active
-          ? "border-[var(--border-strong)] bg-white/[0.03]"
+          ? "border-[var(--border-strong)] bg-[var(--active-surface)]"
           : "border-[var(--border)] bg-transparent hover:border-[var(--border-strong)]"
       }`}
     >
@@ -55,7 +57,7 @@ function selectClassName() {
   return "h-12 border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[14px] text-[var(--foreground)] outline-none";
 }
 
-const STEPS = ["Provider", "Runtime", "Review"];
+const STEPS = ["Theme", "Provider", "Runtime", "Review"];
 
 export function RuntimeSetupPanel({
   summary,
@@ -67,6 +69,7 @@ export function RuntimeSetupPanel({
   onComplete?: () => void;
 }) {
   const [step, setStep] = useState(0);
+  const [themeChoice, setThemeChoice] = useState<string>(DEFAULT_THEME_ID);
   const [runtimeChoice, setRuntimeChoice] = useState("");
   const [modelChoice, setModelChoice] = useState("");
   const [providerMode, setProviderMode] = useState("local");
@@ -96,6 +99,7 @@ export function RuntimeSetupPanel({
   const summaryKey = JSON.stringify({
     preferred_runtime_id: summary.settings.preferred_runtime_id,
     preferred_model_id: summary.settings.preferred_model_id,
+    theme_id: summary.settings.theme_id,
     custom_model_enabled: summary.settings.custom_model_enabled,
     custom_model_name: summary.settings.custom_model_name,
     custom_model_repo: summary.settings.custom_model_repo,
@@ -116,6 +120,9 @@ export function RuntimeSetupPanel({
     if (hydratedKey === summaryKey) {
       return;
     }
+    const nextTheme = themeById(summary.settings.theme_id).id;
+    setThemeChoice(nextTheme);
+    applyTheme(nextTheme);
     setRuntimeChoice(
       summary.settings.preferred_runtime_id ||
         summary.runtime_plan.runtime.id ||
@@ -193,6 +200,7 @@ export function RuntimeSetupPanel({
   function settingsPayload(markSetupComplete = false): SettingsUpdate {
     return {
       setup_completed: markSetupComplete,
+      theme_id: themeChoice,
       provider_mode: providerMode,
       openai_base_url: endpoint.trim(),
       openai_api_key: apiKey.trim(),
@@ -212,9 +220,12 @@ export function RuntimeSetupPanel({
 
   function validateStep(targetStep = step): string | null {
     if (targetStep === 0) {
-      return providerMode.trim() ? null : "Choose how Nipux should reach a model.";
+      return themeChoice.trim() ? null : "Choose a theme.";
     }
     if (targetStep === 1) {
+      return providerMode.trim() ? null : "Choose how Nipux should reach a model.";
+    }
+    if (targetStep === 2) {
       if (providerMode === "external") {
         return externalSelectionReady ? null : "External mode needs an endpoint and model name.";
       }
@@ -284,14 +295,14 @@ export function RuntimeSetupPanel({
   }
 
   async function handlePrimaryAction() {
-    if (step < 2) {
+    if (step < 3) {
       const problem = validateStep(step);
       if (problem) {
         setActionError(problem);
         return;
       }
       setActionError(null);
-      setStep((current) => Math.min(current + 1, 2));
+      setStep((current) => Math.min(current + 1, 3));
       return;
     }
 
@@ -322,7 +333,7 @@ export function RuntimeSetupPanel({
   }
 
   const primaryLabel =
-    step < 2
+    step < 3
       ? "Continue"
       : providerMode === "external"
         ? "Save and enter dashboard"
@@ -348,7 +359,7 @@ export function RuntimeSetupPanel({
             <Badge variant="secondary">{`${step + 1} / ${STEPS.length}`}</Badge>
           </div>
 
-          <div className="mt-5 grid grid-cols-3 gap-3">
+          <div className="mt-5 grid grid-cols-4 gap-3">
             {STEPS.map((label, index) => (
               <div key={label} className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -369,6 +380,18 @@ export function RuntimeSetupPanel({
 
         <div className="min-h-0 flex-1 overflow-auto px-5 py-5 md:px-6">
           {step === 0 ? (
+            <div className="space-y-5">
+              <div className="border border-[var(--border)] px-4 py-4">
+                {panelLabel("visual system")}
+                <div className="mt-3 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                  Pick the interface style for this machine. It can be changed later from Settings.
+                </div>
+              </div>
+              <ThemePicker value={themeChoice} onChange={setThemeChoice} />
+            </div>
+          ) : null}
+
+          {step === 1 ? (
             <div className="grid gap-5 lg:grid-cols-2">
               <OptionTile
                 active={providerMode === "local"}
@@ -413,7 +436,7 @@ export function RuntimeSetupPanel({
             </div>
           ) : null}
 
-          {step === 1 ? (
+          {step === 2 ? (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="space-y-5">
                 {providerMode === "external" ? (
@@ -537,12 +560,18 @@ export function RuntimeSetupPanel({
             </div>
           ) : null}
 
-          {step === 2 ? (
+          {step === 3 ? (
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="space-y-5">
                 <div className="grid gap-4 border border-[var(--border)] px-4 py-4">
                   {panelLabel("review")}
                   <div className="grid gap-3 md:grid-cols-2">
+                    <div className="border border-[var(--border)] px-4 py-4">
+                      <div className="text-[14px] text-[var(--foreground)]">Theme</div>
+                      <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
+                        {themeById(themeChoice).label}
+                      </div>
+                    </div>
                     <div className="border border-[var(--border)] px-4 py-4">
                       <div className="text-[14px] text-[var(--foreground)]">Provider</div>
                       <div className="mt-2 text-[13px] leading-[1.7] text-[var(--muted-foreground)]">
@@ -639,7 +668,7 @@ export function RuntimeSetupPanel({
                   ) : null}
 
                   {actionError || summary.runtime_state.last_error ? (
-                    <div className="border border-[var(--danger)]/45 px-4 py-4 text-[13px] leading-[1.7] text-[#d8a499]">
+                    <div className="border border-[var(--danger)]/45 px-4 py-4 text-[13px] leading-[1.7] text-[var(--danger)]">
                       {actionError || summary.runtime_state.last_error}
                     </div>
                   ) : null}
@@ -684,10 +713,10 @@ export function RuntimeSetupPanel({
             </Button>
           </div>
 
-          <Button size="sm" onClick={() => void handlePrimaryAction()} disabled={pendingAction !== null || (step === 2 && installBusy)}>
-            {step === 2 && canEnterDashboard ? <Check className="mr-2 h-4 w-4" /> : null}
+          <Button size="sm" onClick={() => void handlePrimaryAction()} disabled={pendingAction !== null || (step === 3 && installBusy)}>
+            {step === 3 && canEnterDashboard ? <Check className="mr-2 h-4 w-4" /> : null}
             {primaryLabel}
-            {step < 2 ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
+            {step < 3 ? <ArrowRight className="ml-2 h-4 w-4" /> : null}
           </Button>
         </footer>
       </section>

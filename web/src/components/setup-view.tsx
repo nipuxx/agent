@@ -17,6 +17,7 @@ function panelLabel(label: string) {
 }
 
 const STEPS = [
+  "Choose the interface theme",
   "Choose how Nipux reaches a model",
   "Choose the runtime and model",
   "Install, start, and enter the workspace",
