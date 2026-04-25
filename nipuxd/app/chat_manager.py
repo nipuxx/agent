@@ -108,7 +108,7 @@ def _system_context() -> dict[str, Any]:
 
 
 def _chat_messages_for_model(thread_id: str) -> list[dict[str, str]]:
-    history = list_chat_messages(thread_id)[-24:]
+    history = list_chat_messages(thread_id)
     messages: list[dict[str, str]] = [
         {
             "role": "system",
@@ -125,7 +125,7 @@ def _chat_messages_for_model(thread_id: str) -> list[dict[str, str]]:
     for item in history:
         if item["role"] not in {"user", "assistant", "system"}:
             continue
-        messages.append({"role": item["role"], "content": item["body"]})
+        messages.append({"role": item["role"], "content": str(item["body"])[:8000]})
     return messages
 
 

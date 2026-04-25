@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 
 import { AppShell } from "./app-shell";
@@ -11,6 +11,8 @@ import { useLiveSummary } from "@/lib/use-live-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+type PendingMessage = { id: string; label: string; body: string; role: string };
 
 function panelLabel(label: string) {
   return (
@@ -29,7 +31,7 @@ export function ChatView() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [pendingMessages, setPendingMessages] = useState<Array<{ id: string; label: string; body: string; role: string }>>([]);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
 
   async function loadThreads() {
     const rows = await getChatThreads();
@@ -49,8 +51,26 @@ export function ChatView() {
     };
   }, []);
 
-  const { bundle } = useChatBundle(selectedThreadId);
+  const { bundle, refresh: refreshBundle } = useChatBundle(selectedThreadId);
   const selectedThread = bundle?.thread ?? threads.find((thread) => thread.id === selectedThreadId) ?? null;
+  const persistedMessageIds = useMemo(
+    () => new Set((bundle?.messages ?? []).map((item) => item.id)),
+    [bundle?.messages],
+  );
+  const persistedMessageIdKey = useMemo(
+    () => (bundle?.messages ?? []).map((item) => item.id).join("|"),
+    [bundle?.messages],
+  );
+  const visiblePendingMessages = useMemo(
+    () => pendingMessages.filter((item) => !persistedMessageIds.has(item.id)),
+    [pendingMessages, persistedMessageIds],
+  );
+
+  useEffect(() => {
+    if (!persistedMessageIdKey) return;
+    const ids = new Set(persistedMessageIdKey.split("|"));
+    setPendingMessages((current) => current.filter((item) => !ids.has(item.id)));
+  }, [persistedMessageIdKey]);
 
   async function handleNewChat() {
     setPending(true);
@@ -71,9 +91,17 @@ export function ChatView() {
     setPending(true);
     setActionError(null);
     const body = message.trim();
+    const optimisticUserId = `pending-user-${Date.now()}`;
     setMessage("");
     setStreamingText("");
-    setPendingMessages([]);
+    setPendingMessages([
+      {
+        id: optimisticUserId,
+        label: "user",
+        body,
+        role: "user",
+      },
+    ]);
     try {
       let threadId = selectedThreadId;
       if (!threadId) {
@@ -109,24 +137,27 @@ export function ChatView() {
         if (payload.type === "delta") {
           setStreamingText((current) => current + String(payload.content ?? ""));
         } else if (payload.type === "user" && payload.message) {
-          setPendingMessages([
+          const serverMessage = payload.message;
+          setPendingMessages((current) => [
+            ...current.filter((item) => item.id !== optimisticUserId && item.id !== serverMessage.id),
             {
-              id: payload.message.id || `temp-user-${Date.now()}`,
-              label: payload.message.label || "user",
-              body: payload.message.body || body,
-              role: payload.message.role || "user",
+              id: serverMessage.id || `temp-user-${Date.now()}`,
+              label: serverMessage.label || "user",
+              body: serverMessage.body || body,
+              role: serverMessage.role || "user",
             },
           ]);
         } else if (payload.type === "done" && payload.message) {
+          const serverMessage = payload.message;
           setPendingMessages((current) => {
-            const next = current.filter((item) => item.role !== "assistant");
+            const next = current.filter((item) => item.role !== "assistant" && item.id !== serverMessage.id);
             return [
               ...next,
               {
-                id: payload.message?.id || `temp-assistant-${Date.now()}`,
-                label: payload.message?.label || "assistant",
-                body: payload.message?.body || "",
-                role: payload.message?.role || "assistant",
+                id: serverMessage.id || `temp-assistant-${Date.now()}`,
+                label: serverMessage.label || "assistant",
+                body: serverMessage.body || "",
+                role: serverMessage.role || "assistant",
               },
             ];
           });
@@ -149,8 +180,7 @@ export function ChatView() {
       if (buffer.trim()) {
         applyBlock(buffer);
       }
-      await Promise.all([loadThreads(), refresh()]);
-      setPendingMessages([]);
+      await Promise.all([loadThreads(), refresh(), refreshBundle()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to send message.");
       setMessage(body);
@@ -183,11 +213,11 @@ export function ChatView() {
 
   return (
     <AppShell>
-      <section className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
+      <section className="grid h-full min-h-0 min-w-0 overflow-hidden grid-cols-[auto_minmax(0,1fr)]">
         <aside
           className={cn(
             "min-h-0 border-r border-[var(--border)] transition-[width] duration-200",
-            sidebarCollapsed ? "w-[72px]" : "w-[300px]",
+            sidebarCollapsed ? "w-[64px]" : "w-[clamp(220px,22vw,340px)]",
           )}
         >
           <div className="flex h-full min-h-0 flex-col">
@@ -239,9 +269,6 @@ export function ChatView() {
                       ) : (
                         <>
                           <div className="truncate text-[15px] text-[var(--foreground)]">{thread.title}</div>
-                          <div className="mt-2 nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-                            {thread.status}
-                          </div>
                         </>
                       )}
                     </button>
@@ -257,14 +284,14 @@ export function ChatView() {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-col">
-          <header className="border-b border-[var(--border)] p-[var(--page-padding)]">
+          <header className="border-b border-[var(--border)] px-[clamp(16px,3vw,40px)] py-[clamp(16px,2.2vw,28px)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 {panelLabel("direct chat")}
-                <h1 className="nipux-title mt-3 truncate text-[34px] text-[var(--foreground)]">
+                <h1 className="nipux-title mt-3 truncate text-[clamp(24px,3vw,34px)] text-[var(--foreground)]">
                   {selectedThread?.title ?? "No chat selected"}
                 </h1>
-                <p className="mt-3 max-w-[920px] text-[14px] leading-[1.8] text-[var(--muted-foreground)]">
+                <p className="mt-3 hidden max-w-[920px] text-[14px] leading-[1.8] text-[var(--muted-foreground)] md:block">
                   One-on-one model chat with live Nipux context from runtime state, agents, runs, and recent system activity.
                 </p>
               </div>
@@ -272,14 +299,14 @@ export function ChatView() {
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
-          <div className="flex-1 overflow-auto p-[var(--page-padding)]">
+          <div className="flex-1 overflow-auto px-[clamp(16px,4vw,56px)] py-[clamp(16px,3vw,36px)]">
             <div className="nipux-message-list">
-              {bundle?.messages.length || streamingText ? (
+              {bundle?.messages.length || visiblePendingMessages.length || streamingText ? (
                 <>
                   {(bundle?.messages ?? []).map((item) => (
                     <ChatMessageBubble key={item.id} label={item.label} body={item.body} role={item.role} />
                   ))}
-                  {pendingMessages.map((item) => (
+                  {visiblePendingMessages.map((item) => (
                     <ChatMessageBubble key={item.id} label={item.label} body={item.body} role={item.role} />
                   ))}
                   {streamingText ? <ChatMessageBubble label="assistant" body={streamingText} role="assistant" /> : null}
@@ -292,7 +319,7 @@ export function ChatView() {
             </div>
           </div>
 
-          <footer className="border-t border-[var(--border)] p-[var(--page-padding)]">
+          <footer className="border-t border-[var(--border)] px-[clamp(16px,4vw,56px)] py-[clamp(14px,2vw,24px)]">
             <div className="grid gap-3">
               <Input
                 value={message}

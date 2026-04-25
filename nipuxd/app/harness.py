@@ -82,15 +82,15 @@ def _session_metrics_update(session_id: str, usage: dict[str, int], latency_ms: 
 def _task_context(run: dict[str, Any], task: dict[str, Any], thread_id: str, agent_id: str) -> dict[str, Any]:
     checkpoint = get_latest_checkpoint(run["id"])
     browser = get_browser_session_by_agent(agent_id)
-    recent_messages = list_messages(thread_id)[-6:]
+    thread_messages = list_messages(thread_id)
     recent_artifacts = list_artifacts(run["id"])[:6]
     return {
         "goal": run["goal"],
         "task": {"title": task["title"], "objective": task["objective"], "attempt_count": task["attempt_count"]},
         "checkpoint": checkpoint,
         "browser": browser,
-        "recent_messages": [
-            {"role": item["role"], "label": item["label"], "body": item["body"][:1200]} for item in recent_messages
+        "thread_messages": [
+            {"role": item["role"], "label": item["label"], "body": str(item["body"])[:4000]} for item in thread_messages
         ],
         "recent_artifacts": [
             {"kind": item["kind"], "label": item["label"], "path": item["path"], "content": item["content"]}
@@ -186,7 +186,7 @@ def _final_response_messages(
     checkpoint_summary: str,
     artifacts: list[dict[str, Any]],
 ) -> list[dict[str, str]]:
-    recent_messages = list_messages(thread_id)[-8:]
+    thread_messages = list_messages(thread_id)
     return [
         {
             "role": "system",
@@ -203,8 +203,8 @@ def _final_response_messages(
                 f"Original goal:\n{run['goal']}\n\n"
                 f"Latest accepted checkpoint:\n{checkpoint_summary}\n\n"
                 f"Recent artifacts:\n{artifacts[:6]}\n\n"
-                f"Recent thread messages:\n"
-                f"{[{'role': item['role'], 'label': item['label'], 'body': item['body'][:1000]} for item in recent_messages]}"
+                f"Current thread messages:\n"
+                f"{[{'role': item['role'], 'label': item['label'], 'body': str(item['body'])[:3000]} for item in thread_messages]}"
             ),
         },
     ]

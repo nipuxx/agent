@@ -679,7 +679,7 @@ select {
 }
 
 .nipux-message-list {
-  width: min(100%, 960px);
+  width: min(100%, 1040px);
   margin-inline: auto;
 }
 
@@ -701,7 +701,7 @@ select {
 }
 
 .nipux-message-bubble {
-  max-width: min(76%, 740px);
+  max-width: min(82%, 780px);
   border: var(--border-width) solid var(--message-assistant-border);
   border-radius: calc(var(--radius-card) + 6px);
   background: var(--message-assistant-bg);
@@ -740,6 +740,16 @@ select {
 @media (max-width: 720px) {
   .nipux-message-bubble {
     max-width: 90%;
+  }
+}
+
+.nipux-agents-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1280px) {
+  .nipux-agents-layout {
+    grid-template-columns: clamp(220px, 18vw, 280px) minmax(440px, 1fr) 8px minmax(340px, min(var(--browser-width), 42vw));
   }
 }
 

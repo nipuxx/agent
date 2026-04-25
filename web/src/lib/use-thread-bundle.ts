@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getThreadBundle, openEventStream } from "./api";
 import type { ThreadBundle } from "./types";
@@ -11,6 +11,28 @@ export function useThreadBundle(threadId: string | null) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = useCallback(async () => {
+    if (!threadId) {
+      setBundle(null);
+      setLoading(false);
+      setError(null);
+      return null;
+    }
+
+    try {
+      setLoading(true);
+      const next = await getThreadBundle(threadId);
+      setBundle(next);
+      setError(null);
+      return next;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load thread.");
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [threadId]);
+
   useEffect(() => {
     if (!threadId) {
       setBundle(null);
@@ -20,31 +42,15 @@ export function useThreadBundle(threadId: string | null) {
     }
 
     const activeThreadId = threadId;
-
     let active = true;
     let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-
-    async function refresh() {
-      try {
-        setLoading(true);
-        const next = await getThreadBundle(activeThreadId);
-        if (!active) return;
-        setBundle(next);
-        setError(null);
-      } catch (err) {
-        if (!active) return;
-        setError(err instanceof Error ? err.message : "Failed to load thread.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
 
     void refresh();
     const stream = openEventStream(`/api/threads/${activeThreadId}/events`);
     const scheduleRefresh = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        void refresh();
+        if (active) void refresh();
       }, 80);
     };
 
@@ -56,7 +62,7 @@ export function useThreadBundle(threadId: string | null) {
       if (refreshTimer) clearTimeout(refreshTimer);
       stream.close();
     };
-  }, [threadId]);
+  }, [threadId, refresh]);
 
-  return { bundle, loading, error };
+  return { bundle, loading, error, refresh };
 }

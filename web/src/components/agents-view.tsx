@@ -8,9 +8,10 @@ import { ChatMessageBubble } from "./chat-message-bubble";
 import { createAgent, createThread, deleteAgent, getThreads, sendThreadMessage, startAgent, stopAgent } from "@/lib/api";
 import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+
+type PendingMessage = { id: string; label: string; body: string; role: string };
 
 function panelLabel(label: string) {
   return (
@@ -18,10 +19,6 @@ function panelLabel(label: string) {
       {label}
     </div>
   );
-}
-
-function statusVariant(status: string) {
-  return status === "running" ? "success" : "secondary";
 }
 
 export function AgentsView() {
@@ -32,9 +29,9 @@ export function AgentsView() {
   const [threads, setThreads] = useState<Array<{ id: string; title: string; status: string }>>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [agentMessage, setAgentMessage] = useState("");
-  const [browserWidth, setBrowserWidth] = useState(720);
+  const [browserWidth, setBrowserWidth] = useState(600);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
-  const [pendingMessages, setPendingMessages] = useState<Array<{ id: string; label: string; body: string; role: string }>>([]);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
 
   const agents = useMemo(() => summary?.agents ?? [], [summary?.agents]);
   const runs = useMemo(() => summary?.runs ?? [], [summary?.runs]);
@@ -58,7 +55,25 @@ export function AgentsView() {
     [runs, selectedAgent?.id],
   );
 
-  const { bundle } = useThreadBundle(selectedThreadId);
+  const { bundle, refresh: refreshThreadBundle } = useThreadBundle(selectedThreadId);
+  const persistedMessageIds = useMemo(
+    () => new Set((bundle?.messages ?? []).map((item) => item.id)),
+    [bundle?.messages],
+  );
+  const persistedMessageIdKey = useMemo(
+    () => (bundle?.messages ?? []).map((item) => item.id).join("|"),
+    [bundle?.messages],
+  );
+  const visiblePendingMessages = useMemo(
+    () => pendingMessages.filter((item) => !persistedMessageIds.has(item.id)),
+    [pendingMessages, persistedMessageIds],
+  );
+
+  useEffect(() => {
+    if (!persistedMessageIdKey) return;
+    const ids = new Set(persistedMessageIdKey.split("|"));
+    setPendingMessages((current) => current.filter((item) => !ids.has(item.id)));
+  }, [persistedMessageIdKey]);
 
   async function loadThreads(agentId: string) {
     const rows = await getThreads(agentId);
@@ -86,7 +101,8 @@ export function AgentsView() {
   useEffect(() => {
     function handleMove(event: MouseEvent) {
       if (!resizeRef.current) return;
-      const nextWidth = Math.min(980, Math.max(440, resizeRef.current.startWidth - (event.clientX - resizeRef.current.startX)));
+      const maxWidth = Math.max(360, Math.min(980, window.innerWidth * 0.42));
+      const nextWidth = Math.min(maxWidth, Math.max(340, resizeRef.current.startWidth - (event.clientX - resizeRef.current.startX)));
       setBrowserWidth(nextWidth);
     }
 
@@ -175,6 +191,7 @@ export function AgentsView() {
     setPending(true);
     setActionError(null);
     const body = agentMessage.trim();
+    const optimisticUserId = `pending-user-${Date.now()}`;
     setAgentMessage("");
     try {
       let threadId = selectedThreadId;
@@ -186,15 +203,23 @@ export function AgentsView() {
       }
       setPendingMessages([
         {
-          id: `pending-user-${Date.now()}`,
+          id: optimisticUserId,
           label: "user",
           body,
           role: "user",
         },
       ]);
-      await sendThreadMessage(threadId, body);
-      setPendingMessages([]);
-      await Promise.all([loadThreads(selectedAgent.id), refresh()]);
+      const sent = await sendThreadMessage(threadId, body);
+      setPendingMessages((current) => [
+        ...current.filter((item) => item.id !== optimisticUserId && item.id !== sent.id),
+        {
+          id: sent.id,
+          label: sent.label,
+          body: sent.body,
+          role: sent.role,
+        },
+      ]);
+      await Promise.all([loadThreads(selectedAgent.id), refresh(), refreshThreadBundle()]);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to send agent message.");
       setAgentMessage(body);
@@ -227,7 +252,7 @@ export function AgentsView() {
   return (
     <AppShell>
       <section
-        className="grid h-screen min-h-0 min-w-0 overflow-hidden grid-cols-1 xl:[grid-template-columns:280px_minmax(0,1fr)_8px_var(--browser-width)]"
+        className="nipux-agents-layout grid h-full min-h-0 min-w-0 overflow-hidden"
         style={{ ["--browser-width" as string]: `${browserWidth}px` }}
       >
         <aside className="min-h-0 border-r border-[var(--border)]">
@@ -256,16 +281,15 @@ export function AgentsView() {
                       active ? "bg-[var(--active-surface)]" : "hover:bg-[var(--hover-surface)]"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="nipux-title truncate text-[18px] text-[var(--foreground)]">
-                          {agent.name}
-                        </div>
-                        <div className="mt-2 text-[13px] leading-[1.6] text-[var(--muted-foreground)]">
-                          {agent.status === "running" ? "Running" : "Stopped"}
-                        </div>
+                    <div className="min-w-0">
+                      <div className="nipux-title truncate text-[18px] text-[var(--foreground)]">
+                        {agent.name}
                       </div>
-                      <Badge variant={statusVariant(agent.status)}>{agent.status}</Badge>
+                      {agent.description ? (
+                        <div className="mt-2 line-clamp-2 text-[13px] leading-[1.6] text-[var(--muted-foreground)]">
+                          {agent.description}
+                        </div>
+                      ) : null}
                     </div>
                   </button>
                 );
@@ -278,7 +302,7 @@ export function AgentsView() {
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-auto border-r border-[var(--border)]">
+        <main className="flex min-h-0 min-w-0 flex-col border-r border-[var(--border)]">
           <header className="border-b border-[var(--border)] p-[var(--page-padding)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -304,8 +328,8 @@ export function AgentsView() {
             {actionError ? <p className="mt-4 text-[14px] text-[var(--danger)]">{actionError}</p> : null}
           </header>
 
-          <div className="grid h-[calc(100vh-120px)] min-h-0 gap-5 p-[var(--page-padding)]">
-            <div className="grid min-h-0 gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="min-h-0 flex-1 p-[var(--page-padding)]">
+            <div className="grid h-full min-h-0 gap-4 xl:grid-cols-[minmax(180px,220px)_minmax(0,1fr)]">
               <div className="nipux-panel min-h-0 overflow-hidden">
                 <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
                   {panelLabel("threads")}
@@ -325,9 +349,6 @@ export function AgentsView() {
                         }`}
                       >
                         <div className="truncate text-[14px] text-[var(--foreground)]">{thread.title}</div>
-                        <div className="mt-1 nipux-mono text-[11px] uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-                          {thread.status}
-                        </div>
                       </button>
                     ))
                   ) : (
@@ -341,7 +362,7 @@ export function AgentsView() {
               <div className="nipux-panel grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
                 <div className="overflow-auto p-[var(--panel-padding)]">
                   <div className="nipux-message-list">
-                    {bundle?.messages.length || pendingMessages.length ? (
+                    {bundle?.messages.length || visiblePendingMessages.length ? (
                       <>
                         {(bundle?.messages ?? []).map((message) => (
                           <ChatMessageBubble
@@ -351,7 +372,7 @@ export function AgentsView() {
                             role={message.role}
                           />
                         ))}
-                        {pendingMessages.map((message) => (
+                        {visiblePendingMessages.map((message) => (
                           <ChatMessageBubble
                             key={message.id}
                             label={message.label}
