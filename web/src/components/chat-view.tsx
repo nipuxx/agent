@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
 
 import { AppShell } from "./app-shell";
+import { ChatMessageBubble } from "./chat-message-bubble";
 import { apiUrl, createChatThread, getChatThreads } from "@/lib/api";
 import { useChatBundle } from "@/lib/use-chat-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
@@ -15,38 +16,6 @@ function panelLabel(label: string) {
   return (
     <div className="nipux-label">
       {label}
-    </div>
-  );
-}
-
-function MessageBlock({
-  label,
-  body,
-  role,
-}: {
-  label: string;
-  body: string;
-  role: string;
-}) {
-  const assistant = role === "assistant";
-  return (
-    <div
-      className={cn(
-        "max-w-[920px] border p-[var(--card-padding)]",
-        assistant ? "border-[var(--border)] bg-[var(--surface)]" : "border-transparent bg-transparent px-0",
-      )}
-    >
-      <div className="nipux-mono text-[11px] tracking-[0.08em] text-[var(--muted-foreground)] capitalize">
-        {label}
-      </div>
-      <div
-        className={cn(
-          "mt-3 whitespace-pre-wrap leading-[1.78]",
-          assistant ? "text-[16px] text-[var(--foreground)]/92" : "text-[15px] text-[var(--foreground)]/82",
-        )}
-      >
-        {body}
-      </div>
     </div>
   );
 }
@@ -304,16 +273,16 @@ export function ChatView() {
           </header>
 
           <div className="flex-1 overflow-auto p-[var(--page-padding)]">
-            <div className="space-y-8">
+            <div className="nipux-message-list">
               {bundle?.messages.length || streamingText ? (
                 <>
                   {(bundle?.messages ?? []).map((item) => (
-                    <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
+                    <ChatMessageBubble key={item.id} label={item.label} body={item.body} role={item.role} />
                   ))}
                   {pendingMessages.map((item) => (
-                    <MessageBlock key={item.id} label={item.label} body={item.body} role={item.role} />
+                    <ChatMessageBubble key={item.id} label={item.label} body={item.body} role={item.role} />
                   ))}
-                  {streamingText ? <MessageBlock label="assistant" body={streamingText} role="assistant" /> : null}
+                  {streamingText ? <ChatMessageBubble label="assistant" body={streamingText} role="assistant" /> : null}
                 </>
               ) : (
                 <div className="text-[14px] leading-[1.8] text-[var(--muted-foreground)]">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "./app-shell";
 import { BrowserPane } from "./browser-pane";
+import { ChatMessageBubble } from "./chat-message-bubble";
 import { createAgent, createThread, deleteAgent, getThreads, sendThreadMessage, startAgent, stopAgent } from "@/lib/api";
 import { useThreadBundle } from "@/lib/use-thread-bundle";
 import { useLiveSummary } from "@/lib/use-live-summary";
@@ -339,18 +340,24 @@ export function AgentsView() {
 
               <div className="nipux-panel grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
                 <div className="overflow-auto p-[var(--panel-padding)]">
-                  <div className="space-y-5">
+                  <div className="nipux-message-list">
                     {bundle?.messages.length || pendingMessages.length ? (
                       <>
                         {(bundle?.messages ?? []).map((message) => (
-                          <div key={message.id} className={message.role === "assistant" ? "nipux-card p-[var(--card-padding)]" : ""}>
-                            <div className="text-[14px] leading-[1.8] text-[var(--foreground)]/88">{message.body}</div>
-                          </div>
+                          <ChatMessageBubble
+                            key={message.id}
+                            label={message.label}
+                            body={message.body}
+                            role={message.role}
+                          />
                         ))}
                         {pendingMessages.map((message) => (
-                          <div key={message.id}>
-                            <div className="text-[14px] leading-[1.8] text-[var(--foreground)]/88">{message.body}</div>
-                          </div>
+                          <ChatMessageBubble
+                            key={message.id}
+                            label={message.label}
+                            body={message.body}
+                            role={message.role}
+                          />
                         ))}
                       </>
                     ) : (
